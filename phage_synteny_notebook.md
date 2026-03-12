@@ -1,18 +1,21 @@
-// Phage Genome Annotation – Synteny Helper
-// Observable notebook source — paste each cell into a new cell in observablehq.com
-// ─────────────────────────────────────────────────────────────────────────────
+# Phage Genome Annotation – Synteny Helper
+Observable notebook source — paste each cell into a new cell in observablehq.com
 
-// ── CELL 1: title ──────────────────────────────────────────────────────────
-md`# 🧬 Phage Genome Annotation – Synteny Helper
+## ── CELL 1: title ──────────────────────────────────────────────────────────
+
+```md
+# 🧬 Phage Genome Annotation – Synteny Helper
 
 Query [PhagesDB](https://phagesdb.org) for genes with matching phams in the
 same genomic neighbourhood as your gene of interest.
 
 > **Two-sided synteny** – pham of the gene *and* both neighbours match.
 > **One-sided synteny** – pham of the gene matches, and *at least one* neighbour matches.`
+```
 
+## ── CELL 2: inputs ─────────────────────────────────────────────────────────
 
-// ── CELL 2: inputs ─────────────────────────────────────────────────────────
+```js
 viewof inputs = Inputs.form({
   phageName: Inputs.text({
     label: "Phage name",
@@ -27,9 +30,11 @@ viewof inputs = Inputs.form({
     value: null
   })
 })
+```
 
+## ── CELL 3: run button ─────────────────────────────────────────────────────
 
-// ── CELL 3: run button ─────────────────────────────────────────────────────
+```js
 viewof runBtn = Inputs.button("🔍 Find syntenic genes")
 
 
@@ -42,9 +47,10 @@ async function phagesdbGet(path) {
   if (!resp.ok) throw new Error(`HTTP ${resp.status} for ${path}`);
   return resp.json();
 }
+```
 
-
-// ── CELL 5: core data-fetching logic ───────────────────────────────────────
+## ── CELL 5: core data-fetching logic ───────────────────────────────────────
+```js
 result = {
   const { phageName, geneStop } = inputs;
   if (!phageName || !geneStop) return { status: "idle" };
@@ -227,8 +233,11 @@ result = {
     return { status: "error", message: err.message };
   }
 }
+```
 
-// ── CELL 6: summary badges ─────────────────────────────────────────────────
+## ── CELL 6: summary badges ─────────────────────────────────────────────────
+
+```js
 html`${(() => {
   if (result.status === "idle")
     return `<p style="color:#888">Enter a phage name and gene number, then click <strong>Find syntenic genes</strong>.</p>`;
@@ -263,9 +272,11 @@ html`${(() => {
     </div>
   </div>`;
 })()}`
+```
 
+## ── CELL 7: the table ──────────────────────────────────────────────────────
 
-// ── CELL 7: the table ──────────────────────────────────────────────────────
+```js
 html`${(() => {
   if (result.status !== "ok" || result.rows.length === 0) return "";
 
@@ -344,9 +355,11 @@ html`${(() => {
   html_out += `</tbody></table></div>`;
   return html_out;
 })()}`
+```
 
+## ── CELL 8: pham metadata summary ─────────────────────────────────────────
 
-// ── CELL 8: pham metadata summary ─────────────────────────────────────────
+```js
 html`${(() => {
   if (result.status !== "ok" || !result.phamStats) return "";
 
@@ -399,14 +412,16 @@ html`${(() => {
   summary += \`</div>\`;
   return summary;
 })()}\`
+```
 
+## ── CELL 9: loading indicator ──────────────────────────────────────────────
 
-// ── CELL 9: loading indicator ──────────────────────────────────────────────
-// Observable shows a loading spinner automatically while \`result\` is pending,
-// but this cell provides a friendlier status line.
-html\`<div style="color:#64748b;font-size:0.85em;margin-top:8px">
+Observable shows a loading spinner automatically while \`result\` is pending, but this cell provides a friendlier status line.
+```html
+<div style="color:#64748b;font-size:0.85em;margin-top:8px">
   \${result.status === "idle"   ? "" :
     result.status === "error"  ? "" :
     result.rows.length === 0   ? "✅ Done — no syntenic genes found." :
     \`✅ Loaded \${result.rows.length} syntenic gene(s).\`}
 </div>\`
+```
