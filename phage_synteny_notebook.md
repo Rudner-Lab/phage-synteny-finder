@@ -354,9 +354,10 @@ html`${(() => {
       const verdict = Math.abs(z) < 0.5 ? "typical for"
                     : Math.abs(z) < 1.0 ? "slightly atypical for"
                     : "notably atypical for";
+      const exactScope = useCluster ? `${refPhageCluster} cluster pham members` : `pham ${result.refPham} members`;
       const exactNote = cmpExactCount > 0
-        ? ` ${cmpExactCount} of ${cmpStats.count} (${Math.round(100 * cmpExactCount / cmpStats.count)}%) pham members share this exact length.`
-        : " No other members share this exact length.";
+        ? ` ${cmpExactCount} of ${cmpStats.count} (${Math.round(100 * cmpExactCount / cmpStats.count)}%) ${exactScope} share this exact length.`
+        : ` No other ${exactScope} share this exact length.`;
       sentence = `This gene (${fmt(refGeneLength)}) is <strong>${verdict} ${cmpLabel}</strong> `
                + `(mean ${fmt(cmpStats.mean)} ± ${fmt(cmpStats.stdDev)}, ${fmtZ(z)} SDs from mean).<br>${exactNote}`;
     }
