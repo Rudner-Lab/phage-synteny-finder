@@ -37,19 +37,21 @@ viewof inputs = Inputs.form({
 result = {
   var { phageName, geneStop } = inputs;
   if (!phageName || !geneStop) return { status: "idle" };
-  phageName = phageName.trim()
-  var genomeIsDraft=false;
+  // Normalize: always work with the base name (no _Draft suffix)
+  phageName = phageName.trim().replace(/_Draft$/i, "");
+
+  // Helper: fetch genome by base name, falling back to the _Draft variant
+  const fetchGenome = async (name) => {
+    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password);
+    if (data) return data;
+    return await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password);
+  };
 
   try {
     // 1. Fetch the reference phage
-    var refPhage = await getPhameratorData(dataset, `/genome/${encodeURIComponent(phageName.trim())}/`, user.email, user.password);
+    var refPhage = await fetchGenome(phageName);
     if (!refPhage) {
-      refPhage = await getPhameratorData(dataset, `/genome/${encodeURIComponent(phageName.trim())}_Draft/`, user.email, user.password);
-      if (!refPhage) {
-        return { status: "error", message: `Phage '${phageName}' not found on Phamerator.` };
-      }
-      genomeIsDraft=true;
-      phageName=`${phageName}_Draft`
+      return { status: "error", message: `Phage '${phageName}' not found on Phamerator.` };
     }
     const genes = refPhage.genes;
     if (!genes || genes.length === 0) {
@@ -89,9 +91,8 @@ result = {
     const phamGenes = await getPhameratorData(
       dataset, `/phamily/${refPham}`, user.email, user.password
     );
-    const members = (phamGenes).filter(
-      g => g.phageID !== phageName
-    );
+    // Exclude the ref phage (phageName is already the base name without _Draft)
+    const members = (phamGenes).filter(g => g.phageID !== phageName);
 
     if (members.length === 0) {
       return {
@@ -110,12 +111,12 @@ result = {
     await Promise.all(
       uniquePhageNames.map(async name => {
         try {
-          const data = await  getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password);
-          phageData.set(name, {
-            cluster:    data.clusterSubcluster    || "—",
-            genes: data.genes,
-          });
-        } catch { phageData.set(name, { cluster: "—", genes: []}); }
+          const data = await fetchGenome(name);
+          phageData.set(name, data
+            ? { cluster: data.clusterSubcluster || "—", genes: data.genes }
+            : { cluster: "—", genes: [] }
+          );
+        } catch { phageData.set(name, { cluster: "—", genes: [] }); }
       })
     );
 
@@ -171,6 +172,8 @@ result = {
     const allLengths = phamGenes.map(g => g.stop - g.start).filter(l => l > 0);
     const clusterLengths = phamGenes
       .filter(g => {
+        // The ref phage is not in phageData (only candidates are), so handle it directly
+        if (g.phageID === phageName) return true;
         const gPhageMeta = phageData.get(g.phageID);
         return gPhageMeta && gPhageMeta.cluster === refPhageCluster;
       })
@@ -233,8 +236,8 @@ html`${(() => {
   const { rows, phageName, geneNumber, refPham, refUpPham, refDnPham } = result;
   const two = rows.filter(r => r.twoSided).length;
   const one = rows.length - two;
-  const phageUrl = `https://phagesdb.org/phages/${encodeURIComponent(phageName)}/`;
-  const phamUrl  = (p) => `https://phagesdb.org/phamily/${encodeURIComponent(p)}/`;
+  const phageUrl = `https://phagesdb.org/phages/${encodeURIComponent(phageName.replace(/_Draft$/i, ""))}/`;
+  const phamUrl  = (p) => `https://phagesdb.org/phams/${encodeURIComponent(p)}/`;
 
   return `
   <div style="margin-bottom:6px;font-size:0.88em;color:#475569">
@@ -435,14 +438,14 @@ html`${(() => {
   if (refGeneLength && cmpStats) {
     if (refGeneLength === cmpStats.mode) {
       // Mode match is the most meaningful result — lead with it
-      sentence = `Your gene (${fmt(refGeneLength)}) <strong>matches the mode</strong> for ${cmpLabel} — `
+      sentence = `This gene (${fmt(refGeneLength)}) <strong>matches the mode</strong> for ${cmpLabel} — `
                + `${cmpStats.modeFreqPct}% of members share this exact length.`;
     } else if (cmpStats.stdDev > 0) {
       const z = (refGeneLength - cmpStats.mean) / cmpStats.stdDev;
       const verdict = Math.abs(z) < 0.5 ? "typical for"
                     : Math.abs(z) < 1.0 ? "slightly atypical for"
                     : "notably atypical for";
-      sentence = `Your gene (${fmt(refGeneLength)}) is <strong>${verdict} ${cmpLabel}</strong> `
+      sentence = `This gene (${fmt(refGeneLength)}) is <strong>${verdict} ${cmpLabel}</strong> `
                + `(mean ${fmt(cmpStats.mean)} ± ${fmt(cmpStats.stdDev)}, z = ${fmtZ(z)}).`;
     }
   }
@@ -471,7 +474,7 @@ html`${(() => {
         ${row("Range",           `${fmt(phamStats.min)}–${fmt(phamStats.max)}`, cs ? `${fmt(cs.min)}–${fmt(cs.max)}` : "—")}
         ${row("Mean ± SD",       `${fmt(phamStats.mean)} ± ${fmt(phamStats.stdDev)}`, cs ? `${fmt(cs.mean)} ± ${fmt(cs.stdDev)}` : "—")}
         ${row("Mode (freq)",      `${fmt(phamStats.mode)} (${phamStats.modeFreqPct}%)`, cs ? `${fmt(cs.mode)} (${cs.modeFreqPct}%)` : "—")}
-        ${row("Your gene",       `<strong>${fmt(refGeneLength)}</strong>`, `<strong>${fmt(refGeneLength)}</strong>`)}
+        ${row("This gene",       `<strong>${fmt(refGeneLength)}</strong>`, `<strong>${fmt(refGeneLength)}</strong>`)}
       </tbody>
     </table>
   </div>`;
