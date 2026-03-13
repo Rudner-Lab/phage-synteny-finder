@@ -290,7 +290,164 @@ html`${(() => {
 })()}`
 ```
 
-## ── CELL 7: the table ──────────────────────────────────────────────────────
+## ── CELL 7: pham metadata summary ─────────────────────────────────────────
+
+```js
+html`${(() => {
+  if (result.status !== "ok" || !result.phamStats) return "";
+
+  const { refGeneLength, refPhageCluster, phamStats, clusterStats, phamExactCount, clusterExactCount } = result;
+  const fmt  = (n) => n != null ? `${n} bp` : "—";
+  const fmtZ = (z) => (z >= 0 ? "+" : "") + z.toFixed(1);
+
+  // Pick the most relevant comparitor (cluster preferred if available)
+  const useCluster = clusterStats && clusterStats.count > 1;
+  const cmpStats      = useCluster ? clusterStats : phamStats;
+  const cmpLabel      = useCluster ? refPhageCluster : `pham ${result.refPham}`;
+  const cmpExactCount = useCluster ? clusterExactCount : phamExactCount;
+
+  const fmtExact = (n, total) => `${n} (${Math.round(100 * n / total)}%)`;
+
+  let sentence = "";
+  if (refGeneLength && cmpStats) {
+    if (refGeneLength === cmpStats.mode) {
+      // Mode match is the most meaningful result — lead with it
+      sentence = `This gene (${fmt(refGeneLength)}) <strong>matches the mode</strong> for ${cmpLabel} — `
+               + `${cmpStats.modeFreqPct}% of members share this exact length.`;
+    } else if (cmpStats.stdDev > 0) {
+      const z = (refGeneLength - cmpStats.mean) / cmpStats.stdDev;
+      const verdict = Math.abs(z) < 0.5 ? "typical for"
+                    : Math.abs(z) < 1.0 ? "slightly atypical for"
+                    : "notably atypical for";
+      const exactNote = cmpExactCount > 0
+        ? ` ${cmpExactCount} of ${cmpStats.count} (${Math.round(100 * cmpExactCount / cmpStats.count)}%) pham members share this exact length.`
+        : " No other members share this exact length.";
+      sentence = `This gene (${fmt(refGeneLength)}) is <strong>${verdict} ${cmpLabel}</strong> `
+               + `(mean ${fmt(cmpStats.mean)} ± ${fmt(cmpStats.stdDev)}, ${fmtZ(z)} SDs from mean).<br>${exactNote}`;
+    }
+  }
+
+  const row = (label, ps, cs) => `
+    <tr>
+      <td style="padding:5px 10px;color:#475569">${label}</td>
+      <td style="padding:5px 10px;text-align:right">${ps}</td>
+      <td style="padding:5px 10px;text-align:right">${cs}</td>
+    </tr>`;
+
+  const cs = clusterStats;
+  let out = `
+  <div style="padding:12px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;font-size:0.88em;line-height:1.6">
+    <p style="margin:0 0 8px 0">${sentence}</p>
+    <table style="border-collapse:collapse;width:100%">
+      <thead>
+        <tr style="border-bottom:2px solid #cbd5e1;font-weight:700;color:#1e293b">
+          <th style="padding:5px 10px;text-align:left;font-weight:600;color:#64748b"> </th>
+          <th style="padding:5px 10px;text-align:right">All pham ${result.refPham}</th>
+          <th style="padding:5px 10px;text-align:right">${refPhageCluster ? refPhageCluster + " cluster" : "—"}</th>
+        </tr>
+      </thead>
+      <tbody style="color:#334155">
+        ${row("Genes (n)",       phamStats.count,                       cs ? cs.count : "—")}
+        ${row("Range",           `${fmt(phamStats.min)}–${fmt(phamStats.max)}`, cs ? `${fmt(cs.min)}–${fmt(cs.max)}` : "—")}
+        ${row("Mean ± SD",       `${fmt(phamStats.mean)} ± ${fmt(phamStats.stdDev)}`, cs ? `${fmt(cs.mean)} ± ${fmt(cs.stdDev)}` : "—")}
+        ${row("Mode (freq)",      `${fmt(phamStats.mode)} (${phamStats.modeFreqPct}%)`, cs ? `${fmt(cs.mode)} (${cs.modeFreqPct}%)` : "—")}
+        ${row("This gene",       `<strong>${fmt(refGeneLength)}</strong>`, `<strong>${fmt(refGeneLength)}</strong>`)}
+        ${row("Same length",     fmtExact(phamExactCount, phamStats.count), cs ? fmtExact(clusterExactCount, cs.count) : "—")}
+      </tbody>
+    </table>
+  </div>`;
+  return out;
+})()}`
+```
+
+## ── CELL 8: synteny statement generator ────────────────────────────────────
+
+```js
+{
+  if (result.status !== "ok") return html``;
+
+  const { rows, refGeneFunc, refUpFunc, refDnFunc, refPhageCluster } = result;
+  const fn = (f) => f || "NKF";
+
+  // Pick best comparison phage: same-cluster non-Draft > same-cluster Draft > any non-Draft > any Draft
+  const best = (candidates) => {
+    if (!candidates.length) return null;
+    const sameCluster = candidates.filter(r => r.cluster === refPhageCluster);
+    const prefer = (list) => list.find(r => !r.isDraft) || list[0];
+    return sameCluster.length > 0 ? prefer(sameCluster) : prefer(candidates);
+  };
+
+  const anyUp    = rows.filter(r => r.upMatch);
+  const anyDn    = rows.filter(r => r.dnMatch);
+  const twoSided = rows.filter(r => r.twoSided);
+
+  let statement;
+  if (rows.length === 0) {
+    statement = "No synteny.";
+  } else if (twoSided.length > 0) {
+    // Both sides match in a single phage
+    const p = best(twoSided);
+    statement = `${fn(refGeneFunc)}. Upstream gene is ${fn(refUpFunc)}, downstream gene is ${fn(refDnFunc)}, synteny with phage ${p.phage}.`;
+  } else if (anyUp.length > 0 && anyDn.length > 0) {
+    // One-sided on each side but from different phages
+    const pUp = best(anyUp);
+    const pDn = best(anyDn);
+    statement = `${fn(refGeneFunc)}. Upstream gene is ${fn(refUpFunc)}, synteny with phage ${pUp.phage}. Downstream gene is ${fn(refDnFunc)}, synteny with phage ${pDn.phage}.`;
+  } else if (anyUp.length > 0) {
+    const p = best(anyUp);
+    statement = `${fn(refGeneFunc)}. Upstream gene is ${fn(refUpFunc)}, synteny with phage ${p.phage}.`;
+  } else {
+    const p = best(anyDn);
+    statement = `${fn(refGeneFunc)}. Downstream gene is ${fn(refDnFunc)}, synteny with phage ${p.phage}.`;
+  }
+
+  // Warn if any function fields are empty so student knows what to fill in
+  const missing = [
+    !refGeneFunc                      && "gene of interest",
+    anyUp.length > 0 && !refUpFunc    && "upstream neighbour",
+    anyDn.length > 0 && !refDnFunc    && "downstream neighbour"
+  ].filter(Boolean);
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = "padding:12px 16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;font-size:0.9em";
+
+  const label = document.createElement('div');
+  label.style.cssText = "font-weight:700;color:#166534;margin-bottom:6px";
+  label.textContent = "Suggested synteny statement:";
+  wrap.appendChild(label);
+
+  const box = document.createElement('div');
+  box.style.cssText = "background:#fff;border:1px solid #d1fae5;border-radius:6px;padding:10px 14px;font-style:italic;color:#1e293b;line-height:1.5;margin-bottom:8px";
+  box.textContent = statement;
+  wrap.appendChild(box);
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap";
+
+  const copyBtn = document.createElement('button');
+  copyBtn.textContent = "Copy";
+  copyBtn.style.cssText = "padding:3px 14px;border-radius:6px;border:1px solid #6ee7b7;background:#ecfdf5;cursor:pointer;font-size:0.85em;font-weight:600;color:#065f46";
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(statement).then(() => {
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => copyBtn.textContent = "Copy", 1500);
+    });
+  });
+  btnRow.appendChild(copyBtn);
+
+  if (missing.length > 0) {
+    const warn = document.createElement('span');
+    warn.style.cssText = "color:#92400e;font-size:0.82em";
+    warn.textContent = `⚠ No function data for: ${missing.join(", ")} — replace NKF manually.`;
+    btnRow.appendChild(warn);
+  }
+
+  wrap.appendChild(btnRow);
+  return wrap;
+}
+```
+
+## ── CELL 9: synteny table ──────────────────────────────────────────────────────
 
 ```js
 {
@@ -438,163 +595,6 @@ html`${(() => {
     });
   });
 
-  return wrap;
-}
-```
-
-## ── CELL 8: pham metadata summary ─────────────────────────────────────────
-
-```js
-html`${(() => {
-  if (result.status !== "ok" || !result.phamStats) return "";
-
-  const { refGeneLength, refPhageCluster, phamStats, clusterStats, phamExactCount, clusterExactCount } = result;
-  const fmt  = (n) => n != null ? `${n} bp` : "—";
-  const fmtZ = (z) => (z >= 0 ? "+" : "") + z.toFixed(1);
-
-  // Pick the most relevant comparitor (cluster preferred if available)
-  const useCluster = clusterStats && clusterStats.count > 1;
-  const cmpStats      = useCluster ? clusterStats : phamStats;
-  const cmpLabel      = useCluster ? refPhageCluster : `pham ${result.refPham}`;
-  const cmpExactCount = useCluster ? clusterExactCount : phamExactCount;
-
-  const fmtExact = (n, total) => `${n} (${Math.round(100 * n / total)}%)`;
-
-  let sentence = "";
-  if (refGeneLength && cmpStats) {
-    if (refGeneLength === cmpStats.mode) {
-      // Mode match is the most meaningful result — lead with it
-      sentence = `This gene (${fmt(refGeneLength)}) <strong>matches the mode</strong> for ${cmpLabel} — `
-               + `${cmpStats.modeFreqPct}% of members share this exact length.`;
-    } else if (cmpStats.stdDev > 0) {
-      const z = (refGeneLength - cmpStats.mean) / cmpStats.stdDev;
-      const verdict = Math.abs(z) < 0.5 ? "typical for"
-                    : Math.abs(z) < 1.0 ? "slightly atypical for"
-                    : "notably atypical for";
-      const exactNote = cmpExactCount > 0
-        ? ` ${cmpExactCount} of ${cmpStats.count} (${Math.round(100 * cmpExactCount / cmpStats.count)}%) pham members share this exact length.`
-        : " No other members share this exact length.";
-      sentence = `This gene (${fmt(refGeneLength)}) is <strong>${verdict} ${cmpLabel}</strong> `
-               + `(mean ${fmt(cmpStats.mean)} ± ${fmt(cmpStats.stdDev)}, ${fmtZ(z)} SDs from mean).<br>${exactNote}`;
-    }
-  }
-
-  const row = (label, ps, cs) => `
-    <tr>
-      <td style="padding:5px 10px;color:#475569">${label}</td>
-      <td style="padding:5px 10px;text-align:right">${ps}</td>
-      <td style="padding:5px 10px;text-align:right">${cs}</td>
-    </tr>`;
-
-  const cs = clusterStats;
-  let out = `
-  <div style="padding:12px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;font-size:0.88em;line-height:1.6">
-    <p style="margin:0 0 8px 0">${sentence}</p>
-    <table style="border-collapse:collapse;width:100%">
-      <thead>
-        <tr style="border-bottom:2px solid #cbd5e1;font-weight:700;color:#1e293b">
-          <th style="padding:5px 10px;text-align:left;font-weight:600;color:#64748b"> </th>
-          <th style="padding:5px 10px;text-align:right">All pham ${result.refPham}</th>
-          <th style="padding:5px 10px;text-align:right">${refPhageCluster ? refPhageCluster + " cluster" : "—"}</th>
-        </tr>
-      </thead>
-      <tbody style="color:#334155">
-        ${row("Genes (n)",       phamStats.count,                       cs ? cs.count : "—")}
-        ${row("Range",           `${fmt(phamStats.min)}–${fmt(phamStats.max)}`, cs ? `${fmt(cs.min)}–${fmt(cs.max)}` : "—")}
-        ${row("Mean ± SD",       `${fmt(phamStats.mean)} ± ${fmt(phamStats.stdDev)}`, cs ? `${fmt(cs.mean)} ± ${fmt(cs.stdDev)}` : "—")}
-        ${row("Mode (freq)",      `${fmt(phamStats.mode)} (${phamStats.modeFreqPct}%)`, cs ? `${fmt(cs.mode)} (${cs.modeFreqPct}%)` : "—")}
-        ${row("This gene",       `<strong>${fmt(refGeneLength)}</strong>`, `<strong>${fmt(refGeneLength)}</strong>`)}
-        ${row("Same length",     fmtExact(phamExactCount, phamStats.count), cs ? fmtExact(clusterExactCount, cs.count) : "—")}
-      </tbody>
-    </table>
-  </div>`;
-  return out;
-})()}`
-```
-
-## ── CELL 9: synteny statement generator ────────────────────────────────────
-
-```js
-{
-  if (result.status !== "ok") return html``;
-
-  const { rows, refGeneFunc, refUpFunc, refDnFunc, refPhageCluster } = result;
-  const fn = (f) => f || "NKF";
-
-  // Pick best comparison phage: same-cluster non-Draft > same-cluster Draft > any non-Draft > any Draft
-  const best = (candidates) => {
-    if (!candidates.length) return null;
-    const sameCluster = candidates.filter(r => r.cluster === refPhageCluster);
-    const prefer = (list) => list.find(r => !r.isDraft) || list[0];
-    return sameCluster.length > 0 ? prefer(sameCluster) : prefer(candidates);
-  };
-
-  const anyUp    = rows.filter(r => r.upMatch);
-  const anyDn    = rows.filter(r => r.dnMatch);
-  const twoSided = rows.filter(r => r.twoSided);
-
-  let statement;
-  if (rows.length === 0) {
-    statement = "No synteny.";
-  } else if (twoSided.length > 0) {
-    // Both sides match in a single phage
-    const p = best(twoSided);
-    statement = `${fn(refGeneFunc)}. Upstream gene is ${fn(refUpFunc)}, downstream gene is ${fn(refDnFunc)}, synteny with phage ${p.phage}.`;
-  } else if (anyUp.length > 0 && anyDn.length > 0) {
-    // One-sided on each side but from different phages
-    const pUp = best(anyUp);
-    const pDn = best(anyDn);
-    statement = `${fn(refGeneFunc)}. Upstream gene is ${fn(refUpFunc)}, synteny with phage ${pUp.phage}. Downstream gene is ${fn(refDnFunc)}, synteny with phage ${pDn.phage}.`;
-  } else if (anyUp.length > 0) {
-    const p = best(anyUp);
-    statement = `${fn(refGeneFunc)}. Upstream gene is ${fn(refUpFunc)}, synteny with phage ${p.phage}.`;
-  } else {
-    const p = best(anyDn);
-    statement = `${fn(refGeneFunc)}. Downstream gene is ${fn(refDnFunc)}, synteny with phage ${p.phage}.`;
-  }
-
-  // Warn if any function fields are empty so student knows what to fill in
-  const missing = [
-    !refGeneFunc                      && "gene of interest",
-    anyUp.length > 0 && !refUpFunc    && "upstream neighbour",
-    anyDn.length > 0 && !refDnFunc    && "downstream neighbour"
-  ].filter(Boolean);
-
-  const wrap = document.createElement('div');
-  wrap.style.cssText = "padding:12px 16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;font-size:0.9em";
-
-  const label = document.createElement('div');
-  label.style.cssText = "font-weight:700;color:#166534;margin-bottom:6px";
-  label.textContent = "Suggested synteny statement:";
-  wrap.appendChild(label);
-
-  const box = document.createElement('div');
-  box.style.cssText = "background:#fff;border:1px solid #d1fae5;border-radius:6px;padding:10px 14px;font-style:italic;color:#1e293b;line-height:1.5;margin-bottom:8px";
-  box.textContent = statement;
-  wrap.appendChild(box);
-
-  const btnRow = document.createElement('div');
-  btnRow.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap";
-
-  const copyBtn = document.createElement('button');
-  copyBtn.textContent = "Copy";
-  copyBtn.style.cssText = "padding:3px 14px;border-radius:6px;border:1px solid #6ee7b7;background:#ecfdf5;cursor:pointer;font-size:0.85em;font-weight:600;color:#065f46";
-  copyBtn.addEventListener('click', () => {
-    navigator.clipboard.writeText(statement).then(() => {
-      copyBtn.textContent = "Copied!";
-      setTimeout(() => copyBtn.textContent = "Copy", 1500);
-    });
-  });
-  btnRow.appendChild(copyBtn);
-
-  if (missing.length > 0) {
-    const warn = document.createElement('span');
-    warn.style.cssText = "color:#92400e;font-size:0.82em";
-    warn.textContent = `⚠ No function data for: ${missing.join(", ")} — replace NKF manually.`;
-    btnRow.appendChild(warn);
-  }
-
-  wrap.appendChild(btnRow);
   return wrap;
 }
 ```
