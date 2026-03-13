@@ -6,45 +6,50 @@ Observable notebook source — paste each cell into a new cell in observablehq.c
 ```md
 # 🧬 Phage Genome Annotation – Synteny Helper
 
-Query [PhagesDB](https://phagesdb.org) for genes with matching phams in the
-same genomic neighbourhood as your gene of interest.
+Enter a phage name and select a gene. This tool queries [Phamerator](https://phamerator.org) to find every other phage in the database that shares the same pham in a conserved genomic neighbourhood, then summarises the results for annotation.
 
-> **Two-sided synteny** – pham of the gene *and* both neighbours match.
-> **One-sided synteny** – pham of the gene matches, and *at least one* neighbour matches.`
+**What you get:**
+- **Synteny table** — all syntenic genes grouped by cluster, filterable by synteny type and strand direction. Draft genomes are flagged 🚧.
+- **Gene length statistics** — pham-wide and cluster-specific distributions (mean, mode, SD), with context on how typical your gene's length is.
+- **Suggested annotation statement** — auto-generated from neighbour gene functions, ready to copy.
 ```
 
-## ── CELL 2a: phage name input ───────────────────────────────────────────────
+## ── CELL 2: phage name input ───────────────────────────────────────────────
 
 ```js
 viewof phageName = Inputs.text({
   label: "Phage name",
-  placeholder: "e.g. L5",
+  placeholder: "e.g. Beanstalk",
   value: ""
 })
 ```
 
-## ── CELL 2b: fetchGenome helper ─────────────────────────────────────────────
-
-```js
-fetchGenome = async (name) => {
-  const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password);
-  if (data) return { data, isDraft: false };
-  const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password);
-  return { data: draftData, isDraft: !!draftData };
-}
-```
-
-## ── CELL 2c: fetch reference phage ─────────────────────────────────────────
+## ── CELL 3: fetch reference phage ─────────────────────────────────────────
 
 ```js
 refPhageResult = {
+  const fetchGenome = async (name) => {
+    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password);
+    if (data) return { data, isDraft: false };
+    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password);
+    return { data: draftData, isDraft: !!draftData };
+  };
   const pn = phageName?.trim().replace(/_Draft$/i, "");
-  if (!pn) return null;
-  return await fetchGenome(pn);
+  const mkEl = (d, label, color) => {
+    const el = html`<span style="font-size:0.75em;color:${color}">${label}</span>`;
+    Object.assign(el, d);
+    return el;
+  };
+  if (!pn)
+    return mkEl({ data: null, isDraft: false }, "─ enter a phage name", "#94a3b8");
+  const r = await fetchGenome(pn);
+  return r?.data
+    ? mkEl({ data: r.data, isDraft: r.isDraft }, `✓ ${pn} loaded`, "#16a34a")
+    : mkEl({ data: null, isDraft: false }, `✗ ${pn} not found on Phamerator`, "#dc2626");
 }
 ```
 
-## ── CELL 2d: gene selector ──────────────────────────────────────────────────
+## ── CELL 4: gene selector ──────────────────────────────────────────────────
 
 ```js
 viewof selectedGene = {
@@ -58,29 +63,50 @@ viewof selectedGene = {
 }
 ```
 
-## ── CELL 3: core data-fetching logic ───────────────────────────────────────
+## ── CELL 5: core data-fetching logic ───────────────────────────────────────
 ```js
 result = {
   const pn = phageName?.trim().replace(/_Draft$/i, "");
-  if (!pn || !selectedGene) return { status: "idle" };
 
+  const fetchGenome = async (name) => {
+    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password);
+    if (data) return { data, isDraft: false };
+    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password);
+    return { data: draftData, isDraft: !!draftData };
+  };
+
+  // Returns a compact <span> that also carries all data properties.
+  // Downstream cells read result.status, result.rows, etc. off the element.
+  const mkEl = (d) => {
+    const idle = d.status === "idle";
+    const ok   = d.status === "ok";
+    const n    = (d.rows || []).length;
+    const label = idle ? "─ waiting for input"
+                : ok   ? `✓ ${n} syntenic gene${n !== 1 ? "s" : ""} found`
+                       : `✗ ${d.message}`;
+    const color = idle ? "#94a3b8" : ok ? "#16a34a" : "#dc2626";
+    const el = html`<span style="font-size:0.75em;color:${color}">${label}</span>`;
+    Object.assign(el, d);
+    return el;
+  };
+
+  if (!pn || !selectedGene) return mkEl({ status: "idle" });
+
+  let data;
   try {
     // 1. Use the already-fetched reference phage
     const refPhage = refPhageResult?.data;
-    if (!refPhage) {
-      return { status: "error", message: `Phage '${pn}' not found on Phamerator.` };
-    }
+    if (!refPhage)
+      throw new Error(`Phage '${pn}' not found on Phamerator.`);
     const genes = refPhage.genes;
-    if (!genes || genes.length === 0) {
-      return { status: "error", message: `No gene data found for "${pn}". The genome may not be phamerated yet.` };
-    }
+    if (!genes || genes.length === 0)
+      throw new Error(`No gene data found for "${pn}". The genome may not be phamerated yet.`);
 
     // 2. Sort and locate the selected gene by its stop position
     genes.sort((a, b) => (a.stop || 0) - (b.stop || 0));
     const geneIdx = genes.findIndex(g => g.stop === selectedGene.stop);
-    if (geneIdx === -1) {
-      return { status: "error", message: `Selected gene not found in sorted gene list.` };
-    }
+    if (geneIdx === -1)
+      throw new Error(`Selected gene not found in sorted gene list.`);
 
     const refGene     = genes[geneIdx];
     const refPham     = refGene.phamName;
@@ -96,29 +122,29 @@ result = {
     const refUpFunc = (upIdx >= 0 && upIdx < genes.length) ? (genes[upIdx].genefunction || "") : "";
     const refDnFunc = (dnIdx >= 0 && dnIdx < genes.length) ? (genes[dnIdx].genefunction || "") : "";
 
-    if (!refPham) {
-      return { status: "error", message: `Gene ${geneNumber} in ${pn} has no pham assignment yet.` };
-    }
+    if (!refPham)
+      throw new Error(`Gene ${geneNumber} in ${pn} has no pham assignment yet.`);
 
     // 3. Fetch all genes in the same pham to find candidate phages
     const phamGenes = await getPhameratorData(
       dataset, `/phamily/${refPham}`, user.email, user.password
     );
-    // Exclude the ref phage
-    const members = (phamGenes).filter(g => g.phageID !== pn);
+    const members = phamGenes.filter(g => g.phageID !== pn);
 
-    if (members.length === 0) {
-      return {
-        status: "ok",
-        refPham, refUpPham, refDnPham,
-        rows: [],
-        message: `Pham ${refPham} has no members in other phages.`
-      };
-    }
+    const refGeneLength   = refGene.stop - refGene.start;
+    const refPhageCluster = refPhage.clusterSubcluster || refPhage.cluster || null;
+    const base = {
+      status: "ok", phageName: pn, geneNumber, refDir,
+      refGeneFunc, refUpFunc, refDnFunc,
+      refPham, refUpPham, refDnPham,
+      refGeneLength, refPhageCluster
+    };
 
-    // 4. For each candidate gene, fetch the gene's upstream/downstream phams.
+    if (members.length === 0)
+      return mkEl({ ...base, phamStats: null, clusterStats: null,
+                    phamExactCount: 0, clusterExactCount: 0, rows: [] });
 
-    // Fetch phage metadata (cluster/genes) in parallel, deduped by phage
+    // 4. Fetch phage metadata (cluster/genes) in parallel, deduped by phage
     const uniquePhageNames = [...new Set(members.map(g => g.phageID))];
     const phageData = new Map();
     await Promise.all(
@@ -142,7 +168,6 @@ result = {
         const ci = cGenes.findIndex(g => Number(g.name) === Number(candidate.name));
         if (ci === -1) return;
 
-        // Transcription-order neighbours (accounts for candidate's strand)
         const cDir   = cGenes[ci].direction || "forward";
         const cUpIdx = cDir === "reverse" ? ci + 1 : ci - 1;
         const cDnIdx = cDir === "reverse" ? ci - 1 : ci + 1;
@@ -151,8 +176,6 @@ result = {
 
         const upMatch = refUpPham !== null && upPham === refUpPham;
         const dnMatch = refDnPham !== null && dnPham === refDnPham;
-
-        // Must have at least one-sided synteny
         if (!upMatch && !dnMatch) return;
 
         const meta = phageData.get(candidate.phageID) || { cluster: "—" };
@@ -164,32 +187,23 @@ result = {
           direction:    cDir,
           genefunction: cGenes[ci].genefunction || "",
           isDraft:      meta.isDraft || false,
-          upPham,
-          dnPham,
-          upMatch,
-          dnMatch,
+          upPham, dnPham, upMatch, dnMatch,
           twoSided:     upMatch && dnMatch
         });
       })
     );
 
-    // Sort by subcluster (fall back to cluster), then phage name
     rows.sort((a, b) =>
       a.sortKey.localeCompare(b.sortKey) || a.phage.localeCompare(b.phage)
     );
 
-    // Fetch all pham genes (including the ref gene) for metadata analysis
-    const refGeneLength = refGene.stop - refGene.start;
-    const refPhageCluster = refPhage.clusterSubcluster || refPhage.cluster || null;
-
-    // Compute pham-wide statistics
+    // 6. Compute pham-wide statistics
     const allLengths = phamGenes.map(g => g.stop - g.start).filter(l => l > 0);
     const clusterLengths = phamGenes
       .filter(g => {
-        // The ref phage is not in phageData (only candidates are), so handle it directly
         if (g.phageID === pn) return true;
-        const gPhageMeta = phageData.get(g.phageID);
-        return gPhageMeta && gPhageMeta.cluster === refPhageCluster;
+        const m = phageData.get(g.phageID);
+        return m && m.cluster === refPhageCluster;
       })
       .map(g => g.stop - g.start)
       .filter(l => l > 0);
@@ -198,7 +212,6 @@ result = {
       if (lengths.length === 0) return null;
       const sorted = [...lengths].sort((a, b) => a - b);
       const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
-      // Mode: most frequent value
       const freq = {};
       let mode = sorted[0], maxFreq = 0;
       for (const v of sorted) {
@@ -209,39 +222,30 @@ result = {
         sorted.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / Math.max(sorted.length - 1, 1)
       );
       return {
-        count: sorted.length,
-        min: sorted[0],
-        max: sorted[sorted.length - 1],
-        mean: Math.round(mean),
-        mode: mode,
+        count: sorted.length, min: sorted[0], max: sorted[sorted.length - 1],
+        mean: Math.round(mean), mode,
         modeFreqPct: Math.round(100 * maxFreq / sorted.length),
         stdDev: Math.round(stdDev)
       };
     };
 
-    const phamStats = computeStats(allLengths);
+    const phamStats    = computeStats(allLengths);
     const clusterStats = computeStats(clusterLengths);
-    const phamExactCount    = allLengths.filter(l => l === refGeneLength).length;
-    const clusterExactCount = clusterLengths.filter(l => l === refGeneLength).length;
-
-    return {
-      status: "ok",
-      phageName: pn, geneNumber, refDir,
-      refGeneFunc, refUpFunc, refDnFunc,
-      refPham, refUpPham, refDnPham,
-      refGeneLength, refPhageCluster,
-      phamStats, clusterStats,
-      phamExactCount, clusterExactCount,
-      rows
+    data = {
+      ...base, phamStats, clusterStats, rows,
+      phamExactCount:    allLengths.filter(l => l === refGeneLength).length,
+      clusterExactCount: clusterLengths.filter(l => l === refGeneLength).length
     };
 
   } catch (err) {
-    return { status: "error", message: err.message };
+    data = { status: "error", message: err.message };
   }
+
+  return mkEl(data);
 }
 ```
 
-## ── CELL 5: summary badges ─────────────────────────────────────────────────
+## ── CELL 6: summary badges ─────────────────────────────────────────────────
 
 ```js
 html`${(() => {
