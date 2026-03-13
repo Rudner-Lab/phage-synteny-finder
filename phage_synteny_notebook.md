@@ -63,6 +63,38 @@ viewof selectedGene = {
 }
 ```
 
+## ── CELL 4b: start site override ───────────────────────────────────────────
+
+```js
+viewof customStart = {
+  // Auto-populates from the selected gene; annotator can override.
+  // Resets automatically whenever a different gene is selected.
+  const apiStart = selectedGene?.start ?? null;
+  const wrap = document.createElement('div');
+  wrap.style.cssText = "display:flex;flex-direction:column;gap:2px";
+
+  const input = Inputs.number({
+    label: "Start site",
+    value: apiStart,
+    step: 1,
+    min: 0
+  });
+  wrap.appendChild(input);
+
+  if (apiStart != null) {
+    const hint = document.createElement('span');
+    hint.style.cssText = "font-size:0.75em;color:#94a3b8;margin-left:2px";
+    hint.textContent = `API value: ${Number(apiStart).toLocaleString()} — edit to override for length calculation`;
+    wrap.appendChild(hint);
+  }
+
+  // Forward the input's value and events through the wrapper
+  wrap.value = input.value;
+  input.addEventListener('input', () => { wrap.value = input.value; wrap.dispatchEvent(new Event('input')); });
+  return wrap;
+}
+```
+
 ## ── CELL 5: core data-fetching logic ───────────────────────────────────────
 ```js
 result = {
@@ -131,7 +163,8 @@ result = {
     );
     const members = phamGenes.filter(g => g.phageID !== pn);
 
-    const refGeneLength   = Math.abs(refGene.stop - refGene.start);
+    const effectiveStart  = (customStart != null && !isNaN(customStart)) ? customStart : refGene.start;
+    const refGeneLength   = Math.abs(refGene.stop - effectiveStart);
     const refPhageCluster = refPhage.clusterSubcluster || refPhage.cluster || null;
     const base = {
       status: "ok", phageName: pn, geneNumber, refDir,
