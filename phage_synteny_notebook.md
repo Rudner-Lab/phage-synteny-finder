@@ -43,13 +43,14 @@ result = {
   // Helper: fetch genome by base name, falling back to the _Draft variant
   const fetchGenome = async (name) => {
     const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password);
-    if (data) return data;
-    return await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password);
+    if (data) return { data, isDraft: false };
+    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password);
+    return { data: draftData, isDraft: !!draftData };
   };
 
   try {
     // 1. Fetch the reference phage
-    var refPhage = await fetchGenome(phageName);
+    var { data: refPhage } = await fetchGenome(phageName);
     if (!refPhage) {
       return { status: "error", message: `Phage '${phageName}' not found on Phamerator.` };
     }
@@ -111,10 +112,10 @@ result = {
     await Promise.all(
       uniquePhageNames.map(async name => {
         try {
-          const data = await fetchGenome(name);
+          const { data, isDraft } = await fetchGenome(name);
           phageData.set(name, data
-            ? { cluster: data.clusterSubcluster || "—", genes: data.genes }
-            : { cluster: "—", genes: [] }
+            ? { cluster: data.clusterSubcluster || "—", genes: data.genes, isDraft }
+            : { cluster: "—", genes: [], isDraft: false }
           );
         } catch { phageData.set(name, { cluster: "—", genes: [] }); }
       })
@@ -150,6 +151,7 @@ result = {
           sortKey:      meta.cluster || "~",
           direction:    cDir,
           genefunction: cGenes[ci].genefunction || "",
+          isDraft:      meta.isDraft || false,
           upPham,
           dnPham,
           upMatch,
@@ -207,6 +209,8 @@ result = {
 
     const phamStats = computeStats(allLengths);
     const clusterStats = computeStats(clusterLengths);
+    const phamExactCount    = allLengths.filter(l => l === refGeneLength).length;
+    const clusterExactCount = clusterLengths.filter(l => l === refGeneLength).length;
 
     return {
       status: "ok",
@@ -215,6 +219,7 @@ result = {
       refPham, refUpPham, refDnPham,
       refGeneLength, refPhageCluster,
       phamStats, clusterStats,
+      phamExactCount, clusterExactCount,
       rows
     };
 
@@ -361,7 +366,7 @@ html`${(() => {
       html_out += `
       <tr data-group="${gid}" data-syn="${syn}" data-dir="${dir}">
         <td>
-          <a href="https://phagesdb.org/phages/${r.phage}/" target="_blank">${r.phage}</a>
+          <a href="https://phagesdb.org/phages/${r.phage.replace(/_Draft$/i, "")}/" target="_blank">${r.phage}</a>${r.isDraft ? '&nbsp;<span title="Draft genome" style="font-size:0.9em">🚧</span>' : ""}
           ${r.genefunction ? `<span class="gene-fn">${r.genefunction}</span>` : ""}
         </td>
         <td style="text-align:center">${r.geneNumber}</td>
@@ -427,13 +432,18 @@ html`${(() => {
 html`${(() => {
   if (result.status !== "ok" || !result.phamStats) return "";
 
-  const { refGeneLength, refPhageCluster, phamStats, clusterStats } = result;
+  const { refGeneLength, refPhageCluster, phamStats, clusterStats, phamExactCount, clusterExactCount } = result;
   const fmt  = (n) => n != null ? `${n} bp` : "—";
   const fmtZ = (z) => (z >= 0 ? "+" : "") + z.toFixed(1);
 
   // Pick the most relevant comparitor (cluster preferred if available)
-  const cmpStats = (clusterStats && clusterStats.count > 1) ? clusterStats : phamStats;
-  const cmpLabel = (clusterStats && clusterStats.count > 1) ? refPhageCluster : `pham ${result.refPham}`;
+  const useCluster = clusterStats && clusterStats.count > 1;
+  const cmpStats      = useCluster ? clusterStats : phamStats;
+  const cmpLabel      = useCluster ? refPhageCluster : `pham ${result.refPham}`;
+  const cmpExactCount = useCluster ? clusterExactCount : phamExactCount;
+
+  const fmtExact = (n, total) => `${n} (${Math.round(100 * n / total)}%)`;
+
   let sentence = "";
   if (refGeneLength && cmpStats) {
     if (refGeneLength === cmpStats.mode) {
@@ -445,8 +455,11 @@ html`${(() => {
       const verdict = Math.abs(z) < 0.5 ? "typical for"
                     : Math.abs(z) < 1.0 ? "slightly atypical for"
                     : "notably atypical for";
+      const exactNote = cmpExactCount > 0
+        ? ` ${cmpExactCount} of ${cmpStats.count} (${Math.round(100 * cmpExactCount / cmpStats.count)}%) pham members share this exact length.`
+        : " No other members share this exact length.";
       sentence = `This gene (${fmt(refGeneLength)}) is <strong>${verdict} ${cmpLabel}</strong> `
-               + `(mean ${fmt(cmpStats.mean)} ± ${fmt(cmpStats.stdDev)}, z = ${fmtZ(z)}).`;
+               + `(mean ${fmt(cmpStats.mean)} ± ${fmt(cmpStats.stdDev)}, ${fmtZ(z)} SDs from mean).<br>${exactNote}`;
     }
   }
 
@@ -475,6 +488,7 @@ html`${(() => {
         ${row("Mean ± SD",       `${fmt(phamStats.mean)} ± ${fmt(phamStats.stdDev)}`, cs ? `${fmt(cs.mean)} ± ${fmt(cs.stdDev)}` : "—")}
         ${row("Mode (freq)",      `${fmt(phamStats.mode)} (${phamStats.modeFreqPct}%)`, cs ? `${fmt(cs.mode)} (${cs.modeFreqPct}%)` : "—")}
         ${row("This gene",       `<strong>${fmt(refGeneLength)}</strong>`, `<strong>${fmt(refGeneLength)}</strong>`)}
+        ${row("Same length",     fmtExact(phamExactCount, phamStats.count), cs ? fmtExact(clusterExactCount, cs.count) : "—")}
       </tbody>
     </table>
   </div>`;
@@ -491,10 +505,12 @@ html`${(() => {
   const { rows, refGeneFunc, refUpFunc, refDnFunc, refPhageCluster } = result;
   const fn = (f) => f || "NKF";
 
-  // Pick best comparison phage: prefer same cluster, then any
+  // Pick best comparison phage: same-cluster non-Draft > same-cluster Draft > any non-Draft > any Draft
   const best = (candidates) => {
     if (!candidates.length) return null;
-    return candidates.find(r => r.cluster === refPhageCluster) || candidates[0];
+    const sameCluster = candidates.filter(r => r.cluster === refPhageCluster);
+    const prefer = (list) => list.find(r => !r.isDraft) || list[0];
+    return sameCluster.length > 0 ? prefer(sameCluster) : prefer(candidates);
   };
 
   const anyUp    = rows.filter(r => r.upMatch);
