@@ -67,11 +67,19 @@ result = {
       };
     }
 
-    const refGene    = genes[geneIdx];
-    const refPham    = refGene.phamName;
-    const geneNumber = refGene.name;
-    const refUpPham  = geneIdx > 0              ? genes[geneIdx - 1].phamName : null;
-    const refDnPham  = geneIdx < genes.length-1 ? genes[geneIdx + 1].phamName : null;
+    const refGene     = genes[geneIdx];
+    const refPham     = refGene.phamName;
+    const geneNumber  = refGene.name;
+    const refDir      = refGene.direction || "forward";
+    const refGeneFunc = refGene.genefunction || "";
+
+    // Upstream/downstream in transcription order (swap for reverse-strand genes)
+    const upIdx = refDir === "reverse" ? geneIdx + 1 : geneIdx - 1;
+    const dnIdx = refDir === "reverse" ? geneIdx - 1 : geneIdx + 1;
+    const refUpPham = (upIdx >= 0 && upIdx < genes.length) ? genes[upIdx].phamName : null;
+    const refDnPham = (dnIdx >= 0 && dnIdx < genes.length) ? genes[dnIdx].phamName : null;
+    const refUpFunc = (upIdx >= 0 && upIdx < genes.length) ? (genes[upIdx].genefunction || "") : "";
+    const refDnFunc = (dnIdx >= 0 && dnIdx < genes.length) ? (genes[dnIdx].genefunction || "") : "";
 
     if (!refPham) {
       return { status: "error", message: `Gene ${geneNumber} in ${phageName} has no pham assignment yet.` };
@@ -120,8 +128,12 @@ result = {
         const ci = cGenes.findIndex(g => Number(g.name) === Number(candidate.name));
         if (ci === -1) return;
 
-        const upPham = ci > 0              ? cGenes[ci - 1].phamName : null;
-        const dnPham = ci < cGenes.length-1 ? cGenes[ci + 1].phamName : null;
+        // Transcription-order neighbours (accounts for candidate's strand)
+        const cDir   = cGenes[ci].direction || "forward";
+        const cUpIdx = cDir === "reverse" ? ci + 1 : ci - 1;
+        const cDnIdx = cDir === "reverse" ? ci - 1 : ci + 1;
+        const upPham = (cUpIdx >= 0 && cUpIdx < cGenes.length) ? cGenes[cUpIdx].phamName : null;
+        const dnPham = (cDnIdx >= 0 && cDnIdx < cGenes.length) ? cGenes[cDnIdx].phamName : null;
 
         const upMatch = refUpPham !== null && upPham === refUpPham;
         const dnMatch = refDnPham !== null && dnPham === refDnPham;
@@ -131,15 +143,17 @@ result = {
 
         const meta = phageData.get(candidate.phageID) || { cluster: "—" };
         rows.push({
-          phage:       candidate.phageID,
-          geneNumber:  candidate.name,
-          cluster:     meta.cluster,
-          sortKey:     meta.cluster || "~",
+          phage:        candidate.phageID,
+          geneNumber:   candidate.name,
+          cluster:      meta.cluster,
+          sortKey:      meta.cluster || "~",
+          direction:    cDir,
+          genefunction: cGenes[ci].genefunction || "",
           upPham,
           dnPham,
           upMatch,
           dnMatch,
-          twoSided:    upMatch && dnMatch
+          twoSided:     upMatch && dnMatch
         });
       })
     );
@@ -193,7 +207,8 @@ result = {
 
     return {
       status: "ok",
-      phageName, geneNumber,
+      phageName, geneNumber, refDir,
+      refGeneFunc, refUpFunc, refDnFunc,
       refPham, refUpPham, refDnPham,
       refGeneLength, refPhageCluster,
       phamStats, clusterStats,
@@ -206,7 +221,7 @@ result = {
 }
 ```
 
-## ── CELL 6: summary badges ─────────────────────────────────────────────────
+## ── CELL 5: summary badges ─────────────────────────────────────────────────
 
 ```js
 html`${(() => {
@@ -262,6 +277,8 @@ html`${(() => {
   const nTwo  = rows.filter(r => r.twoSided).length;
   const nUp   = rows.filter(r => !r.twoSided && r.upMatch).length;
   const nDown = rows.filter(r => !r.twoSided && r.dnMatch).length;
+  const nFwd  = rows.filter(r => r.direction !== "reverse").length;
+  const nRev  = rows.filter(r => r.direction === "reverse").length;
 
   // Group by cluster for display
   const groups = new Map();
@@ -284,6 +301,10 @@ html`${(() => {
                     return `<span style="display:inline-block;padding:1px 7px;border-radius:9999px;background:#fef9c3;color:#854d0e;font-size:0.75em">↓ downstream</span>`;
   };
 
+  const dirTag = dir => dir === "reverse"
+    ? `<span style="color:#dc2626;font-weight:700" title="Reverse strand">←</span>`
+    : `<span style="color:#2563eb;font-weight:700" title="Forward strand">→</span>`;
+
   // Build HTML (no <script> tags — event listeners attached via JS below)
   let html_out = `
   <style>
@@ -301,18 +322,25 @@ html`${(() => {
     .sfbtn { padding:4px 12px; border-radius:6px; border:1px solid #cbd5e1;
              background:#f8fafc; cursor:pointer; font-size:0.82em; font-weight:600; }
     .sfbtn.active { background:#1e293b; color:#f8fafc; border-color:#1e293b; }
+    .gene-fn { color:#64748b; font-size:0.8em; display:block; margin-top:1px; }
   </style>
-  <div class="sfbar" style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
-    <span style="font-size:0.82em;color:#64748b;margin-right:2px">Show:</span>
-    <button class="sfbtn active" data-filter="all" >All (${rows.length})</button>
-    <button class="sfbtn"        data-filter="two" >🔗 Two-sided (${nTwo})</button>
-    <button class="sfbtn"        data-filter="up"  >↑ Upstream only (${nUp})</button>
-    <button class="sfbtn"        data-filter="down">↓ Downstream only (${nDown})</button>
+  <div style="margin-bottom:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+    <span style="font-size:0.82em;color:#64748b;margin-right:2px">Synteny:</span>
+    <button class="sfbtn active" data-ftype="syn" data-filter="all" >All (${rows.length})</button>
+    <button class="sfbtn"        data-ftype="syn" data-filter="two" >🔗 Two-sided (${nTwo})</button>
+    <button class="sfbtn"        data-ftype="syn" data-filter="up"  >↑ Upstream only (${nUp})</button>
+    <button class="sfbtn"        data-ftype="syn" data-filter="down">↓ Downstream only (${nDown})</button>
+  </div>
+  <div style="margin-bottom:8px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+    <span style="font-size:0.82em;color:#64748b;margin-right:2px">Direction:</span>
+    <button class="sfbtn active" data-ftype="dir" data-filter="all" >All (${rows.length})</button>
+    <button class="sfbtn"        data-ftype="dir" data-filter="fwd" >→ Forward (${nFwd})</button>
+    <button class="sfbtn"        data-ftype="dir" data-filter="rev" >← Reverse (${nRev})</button>
   </div>
   <div style="overflow-x:auto;max-height:70vh;overflow-y:auto">
   <table class="syn-tbl">
     <thead><tr>
-      <th>Phage</th><th>Gene #</th><th>Cluster</th>
+      <th>Phage</th><th>Gene #</th><th>Cluster</th><th style="text-align:center">Dir.</th>
       <th>Upstream pham<br><small style="font-weight:400;opacity:.7">ref: ${refUpPham ?? "—"}</small></th>
       <th>Downstream pham<br><small style="font-weight:400;opacity:.7">ref: ${refDnPham ?? "—"}</small></th>
       <th>Synteny</th>
@@ -323,14 +351,19 @@ html`${(() => {
   for (const [groupKey, groupRows] of groups) {
     const gid = `g${gi++}`;
     html_out += `<tr class="grp-hdr" data-gid="${gid}">
-      <td colspan="6"><span class="chev">▾</span> ${groupKey} (${groupRows.length} gene${groupRows.length>1?"s":""})</td></tr>`;
+      <td colspan="7"><span class="chev">▾</span> ${groupKey} (${groupRows.length} gene${groupRows.length>1?"s":""})</td></tr>`;
     for (const r of groupRows) {
       const syn = r.twoSided ? "two" : r.upMatch ? "up" : "down";
+      const dir = r.direction === "reverse" ? "rev" : "fwd";
       html_out += `
-      <tr data-group="${gid}" data-syn="${syn}">
-        <td><a href="https://phagesdb.org/phages/${r.phage}/" target="_blank">${r.phage}</a></td>
+      <tr data-group="${gid}" data-syn="${syn}" data-dir="${dir}">
+        <td>
+          <a href="https://phagesdb.org/phages/${r.phage}/" target="_blank">${r.phage}</a>
+          ${r.genefunction ? `<span class="gene-fn">${r.genefunction}</span>` : ""}
+        </td>
         <td style="text-align:center">${r.geneNumber}</td>
         <td>${r.cluster || "—"}</td>
+        <td style="text-align:center">${dirTag(r.direction)}</td>
         <td ${cellStyle(r.upMatch, refUpPham)}>${r.upPham ?? "—"}</td>
         <td ${cellStyle(r.dnMatch, refDnPham)}>${r.dnPham ?? "—"}</td>
         <td style="text-align:center">${synTag(r)}</td>
@@ -339,25 +372,34 @@ html`${(() => {
   }
   html_out += `</tbody></table></div>`;
 
-  // Create DOM node and wire up event listeners (avoids <script> injection issues)
+  // Create DOM node and wire up event listeners
   const wrap = document.createElement('div');
   wrap.innerHTML = html_out;
   const tbody = wrap.querySelector('tbody');
 
-  // Filter buttons
+  // Two independent filters applied with AND logic
+  let activeSyn = 'all', activeDir = 'all';
+  const applyFilters = () => {
+    tbody.querySelectorAll('tr[data-syn]').forEach(row => {
+      const synOk = activeSyn === 'all' || row.dataset.syn === activeSyn;
+      const dirOk = activeDir === 'all' || row.dataset.dir === activeDir;
+      row.style.display = (synOk && dirOk) ? '' : 'none';
+    });
+    tbody.querySelectorAll('tr.grp-hdr').forEach(hdr => {
+      const gid = hdr.dataset.gid;
+      const any = [...tbody.querySelectorAll(`tr[data-group="${gid}"]`)].some(r => r.style.display !== 'none');
+      hdr.style.display = any ? '' : 'none';
+    });
+  };
+
   wrap.querySelectorAll('.sfbtn').forEach(btn => {
     btn.addEventListener('click', function() {
-      wrap.querySelectorAll('.sfbtn').forEach(b => b.classList.remove('active'));
+      const ftype = this.dataset.ftype;
+      wrap.querySelectorAll(`.sfbtn[data-ftype="${ftype}"]`).forEach(b => b.classList.remove('active'));
       this.classList.add('active');
-      const filter = this.dataset.filter;
-      tbody.querySelectorAll('tr[data-syn]').forEach(row => {
-        row.style.display = (filter === 'all' || row.dataset.syn === filter) ? '' : 'none';
-      });
-      tbody.querySelectorAll('tr.grp-hdr').forEach(hdr => {
-        const gid = hdr.dataset.gid;
-        const any = [...tbody.querySelectorAll(`tr[data-group="${gid}"]`)].some(r => r.style.display !== 'none');
-        hdr.style.display = any ? '' : 'none';
-      });
+      if (ftype === 'syn') activeSyn = this.dataset.filter;
+      else                 activeDir = this.dataset.filter;
+      applyFilters();
     });
   });
 
@@ -437,14 +479,87 @@ html`${(() => {
 })()}`
 ```
 
-## ── CELL 9: loading indicator ──────────────────────────────────────────────
+## ── CELL 9: synteny statement generator ────────────────────────────────────
 
-Observable shows a loading spinner automatically while \`result\` is pending, but this cell provides a friendlier status line.
-```html
-<div style="color:#64748b;font-size:0.85em;margin-top:8px">
-  \${result.status === "idle"   ? "" :
-    result.status === "error"  ? "" :
-    result.rows.length === 0   ? "✅ Done — no syntenic genes found." :
-    \`✅ Loaded \${result.rows.length} syntenic gene(s).\`}
-</div>\`
+```js
+{
+  if (result.status !== "ok") return html``;
+
+  const { rows, refGeneFunc, refUpFunc, refDnFunc, refPhageCluster } = result;
+  const fn = (f) => f || "NKF";
+
+  // Pick best comparison phage: prefer same cluster, then any
+  const best = (candidates) => {
+    if (!candidates.length) return null;
+    return candidates.find(r => r.cluster === refPhageCluster) || candidates[0];
+  };
+
+  const anyUp    = rows.filter(r => r.upMatch);
+  const anyDn    = rows.filter(r => r.dnMatch);
+  const twoSided = rows.filter(r => r.twoSided);
+
+  let statement;
+  if (rows.length === 0) {
+    statement = "No synteny.";
+  } else if (twoSided.length > 0) {
+    // Both sides match in a single phage
+    const p = best(twoSided);
+    statement = `${fn(refGeneFunc)}. Upstream gene is ${fn(refUpFunc)}, downstream gene is ${fn(refDnFunc)}, synteny with phage ${p.phage}.`;
+  } else if (anyUp.length > 0 && anyDn.length > 0) {
+    // One-sided on each side but from different phages
+    const pUp = best(anyUp);
+    const pDn = best(anyDn);
+    statement = `${fn(refGeneFunc)}. Upstream gene is ${fn(refUpFunc)}, synteny with phage ${pUp.phage}. Downstream gene is ${fn(refDnFunc)}, synteny with phage ${pDn.phage}.`;
+  } else if (anyUp.length > 0) {
+    const p = best(anyUp);
+    statement = `${fn(refGeneFunc)}. Upstream gene is ${fn(refUpFunc)}, synteny with phage ${p.phage}.`;
+  } else {
+    const p = best(anyDn);
+    statement = `${fn(refGeneFunc)}. Downstream gene is ${fn(refDnFunc)}, synteny with phage ${p.phage}.`;
+  }
+
+  // Warn if any function fields are empty so student knows what to fill in
+  const missing = [
+    !refGeneFunc                      && "gene of interest",
+    anyUp.length > 0 && !refUpFunc    && "upstream neighbour",
+    anyDn.length > 0 && !refDnFunc    && "downstream neighbour"
+  ].filter(Boolean);
+
+  const wrap = document.createElement('div');
+  wrap.style.cssText = "padding:12px 16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0;font-size:0.9em";
+
+  const label = document.createElement('div');
+  label.style.cssText = "font-weight:700;color:#166534;margin-bottom:6px";
+  label.textContent = "Suggested synteny statement:";
+  wrap.appendChild(label);
+
+  const box = document.createElement('div');
+  box.style.cssText = "background:#fff;border:1px solid #d1fae5;border-radius:6px;padding:10px 14px;font-style:italic;color:#1e293b;line-height:1.5;margin-bottom:8px";
+  box.textContent = statement;
+  wrap.appendChild(box);
+
+  const btnRow = document.createElement('div');
+  btnRow.style.cssText = "display:flex;gap:8px;align-items:center;flex-wrap:wrap";
+
+  const copyBtn = document.createElement('button');
+  copyBtn.textContent = "Copy";
+  copyBtn.style.cssText = "padding:3px 14px;border-radius:6px;border:1px solid #6ee7b7;background:#ecfdf5;cursor:pointer;font-size:0.85em;font-weight:600;color:#065f46";
+  copyBtn.addEventListener('click', () => {
+    navigator.clipboard.writeText(statement).then(() => {
+      copyBtn.textContent = "Copied!";
+      setTimeout(() => copyBtn.textContent = "Copy", 1500);
+    });
+  });
+  btnRow.appendChild(copyBtn);
+
+  if (missing.length > 0) {
+    const warn = document.createElement('span');
+    warn.style.cssText = "color:#92400e;font-size:0.82em";
+    warn.textContent = `⚠ No function data for: ${missing.join(", ")} — replace NKF manually.`;
+    btnRow.appendChild(warn);
+  }
+
+  wrap.appendChild(btnRow);
+  return wrap;
+}
 ```
