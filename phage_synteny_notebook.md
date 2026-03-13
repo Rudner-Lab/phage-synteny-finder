@@ -13,61 +13,73 @@ same genomic neighbourhood as your gene of interest.
 > **One-sided synteny** – pham of the gene matches, and *at least one* neighbour matches.`
 ```
 
-## ── CELL 2: inputs ─────────────────────────────────────────────────────────
+## ── CELL 2a: phage name input ───────────────────────────────────────────────
 
 ```js
-viewof inputs = Inputs.form({
-  phageName: Inputs.text({
-    label: "Phage name",
-    placeholder: "e.g. L5",
-    value: ""
-  }),
-  geneNumber: Inputs.number({
-    label: "Stop number",
-    placeholder: "e.g. 35,982",
-    min: 3,
-    step: 1,
-    value: null
-  })
+viewof phageName = Inputs.text({
+  label: "Phage name",
+  placeholder: "e.g. L5",
+  value: ""
 })
+```
+
+## ── CELL 2b: fetchGenome helper ─────────────────────────────────────────────
+
+```js
+fetchGenome = async (name) => {
+  const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password);
+  if (data) return { data, isDraft: false };
+  const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password);
+  return { data: draftData, isDraft: !!draftData };
+}
+```
+
+## ── CELL 2c: fetch reference phage ─────────────────────────────────────────
+
+```js
+refPhageResult = {
+  const pn = phageName?.trim().replace(/_Draft$/i, "");
+  if (!pn) return null;
+  return await fetchGenome(pn);
+}
+```
+
+## ── CELL 2d: gene selector ──────────────────────────────────────────────────
+
+```js
+viewof selectedGene = {
+  const genes = refPhageResult?.data?.genes
+    ? [...refPhageResult.data.genes].sort((a, b) => (a.stop || 0) - (b.stop || 0))
+    : [];
+  return Inputs.select(genes, {
+    label: "Gene",
+    format: g => `Gene ${g.name}  (${Number(g.start).toLocaleString()}–${Number(g.stop).toLocaleString()})`
+  });
+}
 ```
 
 ## ── CELL 3: core data-fetching logic ───────────────────────────────────────
 ```js
 result = {
-  var { phageName, geneStop } = inputs;
-  if (!phageName || !geneStop) return { status: "idle" };
-  // Normalize: always work with the base name (no _Draft suffix)
-  phageName = phageName.trim().replace(/_Draft$/i, "");
-
-  // Helper: fetch genome by base name, falling back to the _Draft variant
-  const fetchGenome = async (name) => {
-    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password);
-    if (data) return { data, isDraft: false };
-    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password);
-    return { data: draftData, isDraft: !!draftData };
-  };
+  const pn = phageName?.trim().replace(/_Draft$/i, "");
+  if (!pn || !selectedGene) return { status: "idle" };
 
   try {
-    // 1. Fetch the reference phage
-    var { data: refPhage } = await fetchGenome(phageName);
+    // 1. Use the already-fetched reference phage
+    const refPhage = refPhageResult?.data;
     if (!refPhage) {
-      return { status: "error", message: `Phage '${phageName}' not found on Phamerator.` };
+      return { status: "error", message: `Phage '${pn}' not found on Phamerator.` };
     }
     const genes = refPhage.genes;
     if (!genes || genes.length === 0) {
-      return { status: "error", message: `No gene data found for "${phageName}". The genome may not be phamerated yet.` };
+      return { status: "error", message: `No gene data found for "${pn}". The genome may not be phamerated yet.` };
     }
 
-    // 2. Sort by gene number
+    // 2. Sort and locate the selected gene by its stop position
     genes.sort((a, b) => (a.stop || 0) - (b.stop || 0));
-
-    const geneIdx = genes.findIndex(g => Number(g.stop) === Number(geneStop));
+    const geneIdx = genes.findIndex(g => g.stop === selectedGene.stop);
     if (geneIdx === -1) {
-      return {
-        status: "error",
-        message: `Gene with stop at ${geneStop} not found in ${phageName}.`
-      };
+      return { status: "error", message: `Selected gene not found in sorted gene list.` };
     }
 
     const refGene     = genes[geneIdx];
@@ -85,15 +97,15 @@ result = {
     const refDnFunc = (dnIdx >= 0 && dnIdx < genes.length) ? (genes[dnIdx].genefunction || "") : "";
 
     if (!refPham) {
-      return { status: "error", message: `Gene ${geneNumber} in ${phageName} has no pham assignment yet.` };
+      return { status: "error", message: `Gene ${geneNumber} in ${pn} has no pham assignment yet.` };
     }
 
     // 3. Fetch all genes in the same pham to find candidate phages
     const phamGenes = await getPhameratorData(
       dataset, `/phamily/${refPham}`, user.email, user.password
     );
-    // Exclude the ref phage (phageName is already the base name without _Draft)
-    const members = (phamGenes).filter(g => g.phageID !== phageName);
+    // Exclude the ref phage
+    const members = (phamGenes).filter(g => g.phageID !== pn);
 
     if (members.length === 0) {
       return {
@@ -175,7 +187,7 @@ result = {
     const clusterLengths = phamGenes
       .filter(g => {
         // The ref phage is not in phageData (only candidates are), so handle it directly
-        if (g.phageID === phageName) return true;
+        if (g.phageID === pn) return true;
         const gPhageMeta = phageData.get(g.phageID);
         return gPhageMeta && gPhageMeta.cluster === refPhageCluster;
       })
@@ -214,7 +226,7 @@ result = {
 
     return {
       status: "ok",
-      phageName, geneNumber, refDir,
+      phageName: pn, geneNumber, refDir,
       refGeneFunc, refUpFunc, refDnFunc,
       refPham, refUpPham, refDnPham,
       refGeneLength, refPhageCluster,
