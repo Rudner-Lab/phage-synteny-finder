@@ -131,7 +131,7 @@ result = {
     );
     const members = phamGenes.filter(g => g.phageID !== pn);
 
-    const refGeneLength   = refGene.stop - refGene.start;
+    const refGeneLength   = Math.abs(refGene.stop - refGene.start);
     const refPhageCluster = refPhage.clusterSubcluster || refPhage.cluster || null;
     const base = {
       status: "ok", phageName: pn, geneNumber, refDir,
@@ -198,14 +198,14 @@ result = {
     );
 
     // 6. Compute pham-wide statistics
-    const allLengths = phamGenes.map(g => g.stop - g.start).filter(l => l > 0);
+    const allLengths = phamGenes.map(g => Math.abs(g.stop - g.start)).filter(l => l > 0);
     const clusterLengths = phamGenes
       .filter(g => {
         if (g.phageID === pn) return true;
         const m = phageData.get(g.phageID);
         return m && m.cluster === refPhageCluster;
       })
-      .map(g => g.stop - g.start)
+      .map(g => Math.abs(g.stop - g.start))
       .filter(l => l > 0);
 
     const computeStats = (lengths) => {
@@ -294,7 +294,9 @@ html`${(() => {
 
 ```js
 html`${(() => {
-  if (result.status !== "ok" || !result.phamStats) return "";
+  if (result.status !== "ok") return "";
+  if (!result.phamStats) return `<div style="padding:8px 12px;background:#fef9c3;border-radius:6px;color:#854d0e;font-size:0.85em">⚠ Gene length stats unavailable — pham may have no members with valid coordinates.</div>`;
+  try {
 
   const { refGeneLength, refPhageCluster, phamStats, clusterStats, phamExactCount, clusterExactCount } = result;
   const fmt  = (n) => n != null ? `${n} bp` : "—";
@@ -357,6 +359,10 @@ html`${(() => {
     </table>
   </div>`;
   return out;
+  } catch (err) {
+    console.error("Gene length table:", err);
+    return `<div style="padding:8px 12px;background:#fee2e2;border-radius:6px;color:#b91c1c;font-size:0.8em;white-space:pre-wrap;font-family:monospace">⚠ Gene length table error:\n${err?.stack ?? String(err)}</div>`;
+  }
 })()}`
 ```
 
