@@ -156,13 +156,14 @@ result = {
 
     const effectiveStart  = (customStart != null && !isNaN(customStart)) ? customStart : refGene.start;
     const refGeneLength   = Math.abs(refGene.stop - effectiveStart);
-    const refPhageCluster = refPhage.clusterSubcluster || refPhage.cluster || null;
+    const refPhageCluster       = refPhage.clusterSubcluster || refPhage.cluster || null;
+    const refPhageParentCluster = refPhage.cluster || null;
     var isOrpham    = false;
     const base = {
       status: "ok", phageName: pn, geneNumber, refDir, isOrpham,
       refGeneFunc, refUpFunc, refDnFunc,
       refPham, refUpPham, refDnPham,
-      refGeneLength, refPhageCluster
+      refGeneLength, refPhageCluster, refPhageParentCluster
     };
 
     const phageData = new Map();
@@ -198,8 +199,8 @@ result = {
           try {
             const { data, isDraft } = await fetchGenome(name);
             phageData.set(name, data
-              ? { cluster: data.clusterSubcluster || "—", genes: data.genes, isDraft }
-              : { cluster: "—", genes: [], isDraft: false }
+              ? { cluster: data.clusterSubcluster || data.cluster || "—", parentCluster: data.cluster || null, genes: data.genes, isDraft }
+              : { cluster: "—", parentCluster: null, genes: [], isDraft: false }
             );
           } catch { phageData.set(name, { cluster: "—", genes: [], isDraft: false }); }
         })
@@ -223,6 +224,7 @@ result = {
             phage:         phageId,
             geneNumber:    cGenes[ci].name,
             cluster:       meta.cluster,
+            parentCluster: meta.parentCluster || null,
             sortKey:       meta.cluster || "~",
             direction:     cDir,
             genefunction:  cGenes[ci].genefunction || "",
@@ -242,8 +244,8 @@ result = {
           try {
             const { data, isDraft } = await fetchGenome(name);
             phageData.set(name, data
-              ? { cluster: data.clusterSubcluster || "—", genes: data.genes, isDraft }
-              : { cluster: "—", genes: [], isDraft: false }
+              ? { cluster: data.clusterSubcluster || data.cluster || "—", parentCluster: data.cluster || null, genes: data.genes, isDraft }
+              : { cluster: "—", parentCluster: null, genes: [], isDraft: false }
             );
           } catch { phageData.set(name, { cluster: "—", genes: [] }); }
         })
@@ -269,6 +271,7 @@ result = {
             phage:        candidate.phageID,
             geneNumber:   candidate.name,
             cluster:      meta.cluster,
+            parentCluster: meta.parentCluster || null,
             sortKey:      meta.cluster || "~",
             direction:    cDir,
             genefunction: cGenes[ci].genefunction || "",
@@ -399,7 +402,7 @@ html`${(() => {
   // Pick the most relevant comparitor (cluster preferred if available)
   const useCluster = clusterStats && clusterStats.count > 1;
   const cmpStats      = useCluster ? clusterStats : phamStats;
-  const cmpLabel      = useCluster ? refPhageCluster : `pham ${result.refPham}`;
+  const cmpLabel      = useCluster ? `cluster ${refPhageCluster}` : `pham ${result.refPham}`;
   const cmpExactCount = useCluster ? clusterExactCount : phamExactCount;
 
   const fmtExact = (n, total) => `${n} (${Math.round(100 * n / total)}%)`;
