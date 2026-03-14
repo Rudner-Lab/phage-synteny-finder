@@ -154,120 +154,176 @@ result = {
     const refUpFunc = (upIdx >= 0 && upIdx < genes.length) ? (genes[upIdx].genefunction || "") : "";
     const refDnFunc = (dnIdx >= 0 && dnIdx < genes.length) ? (genes[dnIdx].genefunction || "") : "";
 
-    if (!refPham)
-      throw new Error(`Gene ${geneNumber} in ${pn} has no pham assignment yet.`);
-
-    // 3. Fetch all genes in the same pham to find candidate phages
-    const phamGenes = await getPhameratorData(
-      dataset, `/phamily/${refPham}`, user.email, user.password
-    );
-    const members = phamGenes.filter(g => g.phageID !== pn);
-
     const effectiveStart  = (customStart != null && !isNaN(customStart)) ? customStart : refGene.start;
     const refGeneLength   = Math.abs(refGene.stop - effectiveStart);
     const refPhageCluster = refPhage.clusterSubcluster || refPhage.cluster || null;
+    var isOrpham    = false;
     const base = {
-      status: "ok", phageName: pn, geneNumber, refDir,
+      status: "ok", phageName: pn, geneNumber, refDir, isOrpham,
       refGeneFunc, refUpFunc, refDnFunc,
       refPham, refUpPham, refDnPham,
       refGeneLength, refPhageCluster
     };
 
-    if (members.length === 0)
-      return mkEl({ ...base, phamStats: null, clusterStats: null,
-                    phamExactCount: 0, clusterExactCount: 0, rows: [] });
-
-    // 4. Fetch phage metadata (cluster/genes) in parallel, deduped by phage
-    const uniquePhageNames = [...new Set(members.map(g => g.phageID))];
     const phageData = new Map();
-    await Promise.all(
-      uniquePhageNames.map(async name => {
-        try {
-          const { data, isDraft } = await fetchGenome(name);
-          phageData.set(name, data
-            ? { cluster: data.clusterSubcluster || "—", genes: data.genes, isDraft }
-            : { cluster: "—", genes: [], isDraft: false }
-          );
-        } catch { phageData.set(name, { cluster: "—", genes: [] }); }
-      })
-    );
-
-    // 5. Evaluate synteny for each member gene
     const rows = [];
-    await Promise.all(
-      members.map(async candidate => {
-        const cGenes = phageData.get(candidate.phageID)?.genes;
-        if (!cGenes) return;
-        const ci = cGenes.findIndex(g => Number(g.name) === Number(candidate.name));
-        if (ci === -1) return;
+    let phamStats = null, clusterStats = null, phamExactCount = 0, clusterExactCount = 0;
 
-        const cDir   = cGenes[ci].direction || "forward";
-        const cUpIdx = cDir === "reverse" ? ci + 1 : ci - 1;
-        const cDnIdx = cDir === "reverse" ? ci - 1 : ci + 1;
-        const upPham = (cUpIdx >= 0 && cUpIdx < cGenes.length) ? cGenes[cUpIdx].phamName : null;
-        const dnPham = (cDnIdx >= 0 && cDnIdx < cGenes.length) ? cGenes[cDnIdx].phamName : null;
-
-        const upMatch = refUpPham !== null && upPham === refUpPham;
-        const dnMatch = refDnPham !== null && dnPham === refDnPham;
-        if (!upMatch && !dnMatch) return;
-
-        const meta = phageData.get(candidate.phageID) || { cluster: "—" };
-        rows.push({
-          phage:        candidate.phageID,
-          geneNumber:   candidate.name,
-          cluster:      meta.cluster,
-          sortKey:      meta.cluster || "~",
-          direction:    cDir,
-          genefunction: cGenes[ci].genefunction || "",
-          isDraft:      meta.isDraft || false,
-          upPham, dnPham, upMatch, dnMatch,
-          twoSided:     upMatch && dnMatch
-        });
-      })
+    const phamGenes = await getPhameratorData(
+      dataset, `/phamily/${refPham}`, user.email, user.password
     );
+    const members = phamGenes.filter(g => g.phageID !== pn);
+
+    if (members.length === 0) {
+      base.isOrpham = true;
+      // 3a. Orpham mode — no pham to search by; find phages that share the same
+      //     upstream and/or downstream pham landmarks, then identify the gene in between.
+      if (!refUpPham && !refDnPham)
+        return mkEl({ ...base, phamStats: null, clusterStats: null,
+                      phamExactCount: 0, clusterExactCount: 0, rows: [] });
+
+      const [upPhamGenes, dnPhamGenes] = await Promise.all([
+        refUpPham ? getPhameratorData(dataset, `/phamily/${refUpPham}`, user.email, user.password) : Promise.resolve([]),
+        refDnPham ? getPhameratorData(dataset, `/phamily/${refDnPham}`, user.email, user.password) : Promise.resolve([])
+      ]);
+
+      const candidatePhageIds = [...new Set([
+        ...(upPhamGenes || []).map(g => g.phageID),
+        ...(dnPhamGenes || []).map(g => g.phageID)
+      ].filter(id => id !== pn))];
+
+      // Fetch all candidate phage genomes in parallel
+      await Promise.all(
+        candidatePhageIds.map(async name => {
+          try {
+            const { data, isDraft } = await fetchGenome(name);
+            phageData.set(name, data
+              ? { cluster: data.clusterSubcluster || "—", genes: data.genes, isDraft }
+              : { cluster: "—", genes: [], isDraft: false }
+            );
+          } catch { phageData.set(name, { cluster: "—", genes: [], isDraft: false }); }
+        })
+      );
+
+      // Scan every gene in each candidate phage for a matching neighborhood
+      for (const phageId of candidatePhageIds) {
+        const meta   = phageData.get(phageId) || { cluster: "—", genes: [], isDraft: false };
+        const cGenes = meta.genes;
+        if (!cGenes || cGenes.length === 0) continue;
+        for (let ci = 0; ci < cGenes.length; ci++) {
+          const cDir   = cGenes[ci].direction || "forward";
+          const cUpIdx = cDir === "reverse" ? ci + 1 : ci - 1;
+          const cDnIdx = cDir === "reverse" ? ci - 1 : ci + 1;
+          const upPham = (cUpIdx >= 0 && cUpIdx < cGenes.length) ? cGenes[cUpIdx].phamName : null;
+          const dnPham = (cDnIdx >= 0 && cDnIdx < cGenes.length) ? cGenes[cDnIdx].phamName : null;
+          const upMatch = refUpPham !== null && upPham === refUpPham;
+          const dnMatch = refDnPham !== null && dnPham === refDnPham;
+          if (!upMatch && !dnMatch) continue;
+          rows.push({
+            phage:         phageId,
+            geneNumber:    cGenes[ci].name,
+            cluster:       meta.cluster,
+            sortKey:       meta.cluster || "~",
+            direction:     cDir,
+            genefunction:  cGenes[ci].genefunction || "",
+            candidatePham: cGenes[ci].phamName || null,
+            isDraft:       meta.isDraft || false,
+            upPham, dnPham, upMatch, dnMatch,
+            twoSided:      upMatch && dnMatch
+          });
+        }
+      }
+
+    } else {
+      // Fetch phage metadata (cluster/genes) in parallel, deduped by phage
+      const uniquePhageNames = [...new Set(members.map(g => g.phageID))];
+      await Promise.all(
+        uniquePhageNames.map(async name => {
+          try {
+            const { data, isDraft } = await fetchGenome(name);
+            phageData.set(name, data
+              ? { cluster: data.clusterSubcluster || "—", genes: data.genes, isDraft }
+              : { cluster: "—", genes: [], isDraft: false }
+            );
+          } catch { phageData.set(name, { cluster: "—", genes: [] }); }
+        })
+      );
+
+      // Evaluate synteny for each member gene
+      await Promise.all(
+        members.map(async candidate => {
+          const cGenes = phageData.get(candidate.phageID)?.genes;
+          if (!cGenes) return;
+          const ci = cGenes.findIndex(g => Number(g.name) === Number(candidate.name));
+          if (ci === -1) return;
+          const cDir   = cGenes[ci].direction || "forward";
+          const cUpIdx = cDir === "reverse" ? ci + 1 : ci - 1;
+          const cDnIdx = cDir === "reverse" ? ci - 1 : ci + 1;
+          const upPham = (cUpIdx >= 0 && cUpIdx < cGenes.length) ? cGenes[cUpIdx].phamName : null;
+          const dnPham = (cDnIdx >= 0 && cDnIdx < cGenes.length) ? cGenes[cDnIdx].phamName : null;
+          const upMatch = refUpPham !== null && upPham === refUpPham;
+          const dnMatch = refDnPham !== null && dnPham === refDnPham;
+          if (!upMatch && !dnMatch) return;
+          const meta = phageData.get(candidate.phageID) || { cluster: "—" };
+          rows.push({
+            phage:        candidate.phageID,
+            geneNumber:   candidate.name,
+            cluster:      meta.cluster,
+            sortKey:      meta.cluster || "~",
+            direction:    cDir,
+            genefunction: cGenes[ci].genefunction || "",
+            isDraft:      meta.isDraft || false,
+            upPham, dnPham, upMatch, dnMatch,
+            twoSided:     upMatch && dnMatch
+          });
+        })
+      );
+
+      // Compute pham-wide statistics
+      const allLengths = phamGenes.map(g => Math.abs(g.stop - g.start)).filter(l => l > 0);
+      const clusterLengths = phamGenes
+        .filter(g => {
+          if (g.phageID === pn) return true;
+          const m = phageData.get(g.phageID);
+          return m && m.cluster === refPhageCluster;
+        })
+        .map(g => Math.abs(g.stop - g.start))
+        .filter(l => l > 0);
+
+      const computeStats = (lengths) => {
+        if (lengths.length === 0) return null;
+        const sorted = [...lengths].sort((a, b) => a - b);
+        const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
+        const freq = {};
+        let mode = sorted[0], maxFreq = 0;
+        for (const v of sorted) {
+          freq[v] = (freq[v] || 0) + 1;
+          if (freq[v] > maxFreq) { maxFreq = freq[v]; mode = v; }
+        }
+        const stdDev = Math.sqrt(
+          sorted.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / Math.max(sorted.length - 1, 1)
+        );
+        return {
+          count: sorted.length, min: sorted[0], max: sorted[sorted.length - 1],
+          mean: Math.round(mean), mode,
+          modeFreqPct: Math.round(100 * maxFreq / sorted.length),
+          stdDev: Math.round(stdDev)
+        };
+      };
+
+      phamStats    = computeStats(allLengths);
+      clusterStats = computeStats(clusterLengths);
+      phamExactCount    = allLengths.filter(l => l === refGeneLength).length;
+      clusterExactCount = clusterLengths.filter(l => l === refGeneLength).length;
+    }
 
     rows.sort((a, b) =>
       a.sortKey.localeCompare(b.sortKey) || a.phage.localeCompare(b.phage)
     );
 
-    // 6. Compute pham-wide statistics
-    const allLengths = phamGenes.map(g => Math.abs(g.stop - g.start)).filter(l => l > 0);
-    const clusterLengths = phamGenes
-      .filter(g => {
-        if (g.phageID === pn) return true;
-        const m = phageData.get(g.phageID);
-        return m && m.cluster === refPhageCluster;
-      })
-      .map(g => Math.abs(g.stop - g.start))
-      .filter(l => l > 0);
-
-    const computeStats = (lengths) => {
-      if (lengths.length === 0) return null;
-      const sorted = [...lengths].sort((a, b) => a - b);
-      const mean = sorted.reduce((a, b) => a + b, 0) / sorted.length;
-      const freq = {};
-      let mode = sorted[0], maxFreq = 0;
-      for (const v of sorted) {
-        freq[v] = (freq[v] || 0) + 1;
-        if (freq[v] > maxFreq) { maxFreq = freq[v]; mode = v; }
-      }
-      const stdDev = Math.sqrt(
-        sorted.reduce((s, v) => s + Math.pow(v - mean, 2), 0) / Math.max(sorted.length - 1, 1)
-      );
-      return {
-        count: sorted.length, min: sorted[0], max: sorted[sorted.length - 1],
-        mean: Math.round(mean), mode,
-        modeFreqPct: Math.round(100 * maxFreq / sorted.length),
-        stdDev: Math.round(stdDev)
-      };
-    };
-
-    const phamStats    = computeStats(allLengths);
-    const clusterStats = computeStats(clusterLengths);
     data = {
       ...base, phamStats, clusterStats, rows,
-      phamExactCount:    allLengths.filter(l => l === refGeneLength).length,
-      clusterExactCount: clusterLengths.filter(l => l === refGeneLength).length
+      phamExactCount, clusterExactCount
     };
 
   } catch (err) {
@@ -287,11 +343,18 @@ html`${(() => {
   if (result.status === "error")
     return `<div style="padding:10px;background:#fee2e2;border-radius:6px;color:#b91c1c">⚠️ ${result.message}</div>`;
 
-  const { rows, phageName, geneNumber, refPham, refUpPham, refDnPham } = result;
+  const { rows, phageName, geneNumber, refPham, refUpPham, refDnPham, isOrpham } = result;
   const two = rows.filter(r => r.twoSided).length;
   const one = rows.length - two;
   const phageUrl = `https://phagesdb.org/phages/${encodeURIComponent(phageName.replace(/_Draft$/i, ""))}/`;
   const phamUrl  = (p) => `https://phagesdb.org/phams/${encodeURIComponent(p)}/`;
+
+  const orphamBanner = isOrpham ? `
+  <div style="padding:10px 14px;background:#fff7ed;border-radius:8px;border:1px solid #fed7aa;color:#92400e;font-size:0.88em;margin-top:10px">
+    <strong>⚠ Orpham gene</strong> — this gene's pham has no other members.
+    <uL><li>The results below show other phages that carry a gene in the same genomic neighbourhood (flanked by the same upstream and/or downstream phams), but <strong>that gene may be entirely unrelated</strong>.</li>
+    <li>The <strong>Gene pham</strong> column shows what pham each syntenic candidate actually belongs to — a consistent pham across multiple results may hint at a possible annotation.</li>
+  </div>` : "";
 
   return `
   <div style="margin-bottom:6px;font-size:0.88em;color:#475569">
@@ -299,7 +362,7 @@ html`${(() => {
     &nbsp;·&nbsp; Gene #${geneNumber}
   </div>
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">
-    <div style="padding:8px 16px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe">
+    <div style="padding:8px 16px;background:${isOrpham ? '#fff7ed' : '#eff6ff'};border-radius:8px;border:1px solid ${isOrpham ? '#fed7aa' : '#bfdbfe'}">
       <b>Pham of interest:</b> <a href="${phamUrl(refPham)}" target="_blank" style="color:#1d4ed8">${refPham}</a>
     </div>
     <div style="padding:8px 16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0">
@@ -319,7 +382,8 @@ html`${(() => {
     <div style="padding:8px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
       <b>${rows.length}</b> total syntenic genes across <b>${new Set(rows.map(r=>r.phage)).size}</b> phages
     </div>
-  </div>`;
+  </div>
+  <div>${orphamBanner}</div>`;
 })()}`
 ```
 
@@ -328,7 +392,11 @@ html`${(() => {
 ```js
 html`${(() => {
   if (result.status !== "ok") return "";
-  if (!result.phamStats) return `<div style="padding:8px 12px;background:#fef9c3;border-radius:6px;color:#854d0e;font-size:0.85em">⚠ Gene length stats unavailable — pham may have no members with valid coordinates.</div>`;
+  if (!result.phamStats) {
+    if (result.isOrpham)
+      return `<div style="padding:8px 12px;background:#fff7ed;border-radius:6px;color:#92400e;font-size:0.85em">ℹ Gene length statistics are not available for orpham genes — there is no pham distribution to compare against.</div>`;
+    return `<div style="padding:8px 12px;background:#fef9c3;border-radius:6px;color:#854d0e;font-size:0.85em">⚠ Gene length stats unavailable — pham may have no members with valid coordinates.</div>`;
+  }
   try {
 
   const { refGeneLength, refPhageCluster, phamStats, clusterStats, phamExactCount, clusterExactCount } = result;
@@ -406,7 +474,7 @@ html`${(() => {
 {
   if (result.status !== "ok") return html``;
 
-  const { rows, refGeneFunc, refUpFunc, refDnFunc, refPhageCluster } = result;
+  const { rows, refGeneFunc, refUpFunc, refDnFunc, refPhageCluster, isOrpham } = result;
   const fn = (f) => f || "NKF";
 
   // Pick best comparison phage: same-cluster non-Draft > same-cluster Draft > any non-Draft > any Draft
@@ -424,6 +492,13 @@ html`${(() => {
   let statement;
   if (rows.length === 0) {
     statement = "No synteny.";
+  } else if (isOrpham) {
+    if (twoSided.length > 0) {
+      const p = best(twoSided);
+      statement = `${fn(refGeneFunc)}. Upstream gene is ${fn(refUpFunc)}, downstream gene is ${fn(refDnFunc)}, synteny with phage ${p.phage}.`;
+    } else {
+      statement = "No synteny";
+    }
   } else if (twoSided.length > 0) {
     // Both sides match in a single phage
     const p = best(twoSided);
@@ -456,6 +531,13 @@ html`${(() => {
   label.textContent = "Suggested synteny statement:";
   wrap.appendChild(label);
 
+  if (isOrpham) {
+    const orphamNote = document.createElement('div');
+    orphamNote.style.cssText = "font-size:0.8em;color:#92400e;background:#fff7ed;border-radius:4px;padding:4px 10px;margin-bottom:8px";
+    orphamNote.textContent = "⚠ Orpham gene — the statement reflects neighbour gene context only, and only two-sided synteny will be called by this tool.";
+    wrap.appendChild(orphamNote);
+  }
+
   const box = document.createElement('div');
   box.style.cssText = "background:#fff;border:1px solid #d1fae5;border-radius:6px;padding:10px 14px;font-style:italic;color:#1e293b;line-height:1.5;margin-bottom:8px";
   box.textContent = statement;
@@ -475,7 +557,7 @@ html`${(() => {
   });
   btnRow.appendChild(copyBtn);
 
-  if (missing.length > 0) {
+  if (missing.length > 0 && statement != "No synteny") {
     const warn = document.createElement('span');
     warn.style.cssText = "color:#92400e;font-size:0.82em";
     warn.textContent = `⚠ No function data for: ${missing.join(", ")} — replace NKF manually.`;
@@ -493,7 +575,8 @@ html`${(() => {
 {
   if (result.status !== "ok" || result.rows.length === 0) return html``;
 
-  const { rows, refUpPham, refDnPham } = result;
+  const { rows, refUpPham, refDnPham, isOrpham } = result;
+  const phamUrl = (p) => `https://phagesdb.org/phams/${encodeURIComponent(p)}/`;
 
   const nTwo  = rows.filter(r => r.twoSided).length;
   const nUp   = rows.filter(r => !r.twoSided && r.upMatch).length;
@@ -561,7 +644,7 @@ html`${(() => {
   <div style="overflow-x:auto;max-height:70vh;overflow-y:auto">
   <table class="syn-tbl">
     <thead><tr>
-      <th>Phage</th><th>Gene #</th><th>Cluster</th><th style="text-align:center">Dir.</th>
+      <th>Phage</th><th>Gene #</th>${isOrpham ? '<th>Gene pham</th>' : ''}<th>Cluster</th><th style="text-align:center">Dir.</th>
       <th>Upstream pham<br><small style="font-weight:400;opacity:.7">ref: ${refUpPham ?? "—"}</small></th>
       <th>Downstream pham<br><small style="font-weight:400;opacity:.7">ref: ${refDnPham ?? "—"}</small></th>
       <th>Synteny</th>
@@ -572,10 +655,15 @@ html`${(() => {
   for (const [groupKey, groupRows] of groups) {
     const gid = `g${gi++}`;
     html_out += `<tr class="grp-hdr" data-gid="${gid}">
-      <td colspan="7"><span class="chev">▾</span> ${groupKey} (${groupRows.length} gene${groupRows.length>1?"s":""})</td></tr>`;
+      <td colspan="${isOrpham ? 8 : 7}"><span class="chev">▾</span> ${groupKey} (${groupRows.length} gene${groupRows.length>1?"s":""})</td></tr>`;
     for (const r of groupRows) {
       const syn = r.twoSided ? "two" : r.upMatch ? "up" : "down";
       const dir = r.direction === "reverse" ? "rev" : "fwd";
+      const orphamPhamCell = isOrpham
+        ? (r.candidatePham
+            ? `<td style="text-align:center"><a href="${phamUrl(r.candidatePham)}" target="_blank" style="color:#2563eb">${r.candidatePham}</a></td>`
+            : `<td style="text-align:center;color:#94a3b8;font-style:italic">orpham</td>`)
+        : "";
       html_out += `
       <tr data-group="${gid}" data-syn="${syn}" data-dir="${dir}">
         <td>
@@ -583,6 +671,7 @@ html`${(() => {
           ${r.genefunction ? `<span class="gene-fn">${r.genefunction}</span>` : ""}
         </td>
         <td style="text-align:center">${r.geneNumber}</td>
+        ${orphamPhamCell}
         <td>${r.cluster || "—"}</td>
         <td style="text-align:center">${dirTag(r.direction)}</td>
         <td ${cellStyle(r.upMatch, refUpPham)}>${r.upPham ?? "—"}</td>
