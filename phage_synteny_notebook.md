@@ -349,13 +349,6 @@ html`${(() => {
   const phageUrl = `https://phagesdb.org/phages/${encodeURIComponent(phageName.replace(/_Draft$/i, ""))}/`;
   const phamUrl  = (p) => `https://phagesdb.org/phams/${encodeURIComponent(p)}/`;
 
-  const orphamBanner = isOrpham ? `
-  <div style="padding:10px 14px;background:#fff7ed;border-radius:8px;border:1px solid #fed7aa;color:#92400e;font-size:0.88em;margin-top:10px">
-    <strong>⚠ Orpham gene</strong> — this gene's pham has no other members.
-    <uL><li>The results below show other phages that carry a gene in the same genomic neighbourhood (flanked by the same upstream and/or downstream phams), but <strong>that gene may be entirely unrelated</strong>.</li>
-    <li>The <strong>Gene pham</strong> column shows what pham each syntenic candidate actually belongs to — a consistent pham across multiple results may hint at a possible annotation.</li>
-  </div>` : "";
-
   return `
   <div style="margin-bottom:6px;font-size:0.88em;color:#475569">
     Phage: <a href="${phageUrl}" target="_blank" style="color:#2563eb;font-weight:600">${phageName}</a>
@@ -364,6 +357,7 @@ html`${(() => {
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:8px">
     <div style="padding:8px 16px;background:${isOrpham ? '#fff7ed' : '#eff6ff'};border-radius:8px;border:1px solid ${isOrpham ? '#fed7aa' : '#bfdbfe'}">
       <b>Pham of interest:</b> <a href="${phamUrl(refPham)}" target="_blank" style="color:#1d4ed8">${refPham}</a>
+      ${isOrpham ? '<br><p style="margin:0;padding:0;font-size:0.75em;">⚠️ This is an orpham</p>' : ''}
     </div>
     <div style="padding:8px 16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0">
       <b>Upstream pham:</b> ${refUpPham ? `<a href="${phamUrl(refUpPham)}" target="_blank" style="color:#15803d">${refUpPham}</a>` : "—"}
@@ -382,8 +376,7 @@ html`${(() => {
     <div style="padding:8px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
       <b>${rows.length}</b> total syntenic genes across <b>${new Set(rows.map(r=>r.phage)).size}</b> phages
     </div>
-  </div>
-  <div>${orphamBanner}</div>`;
+  </div>`;
 })()}`
 ```
 
@@ -394,7 +387,7 @@ html`${(() => {
   if (result.status !== "ok") return "";
   if (!result.phamStats) {
     if (result.isOrpham)
-      return `<div style="padding:8px 12px;background:#fff7ed;border-radius:6px;color:#92400e;font-size:0.85em">ℹ Gene length statistics are not available for orpham genes — there is no pham distribution to compare against.</div>`;
+      return `<div style="padding:8px 12px;border-radius:6px;color:#92400e;font-size:0.85em">ℹ Gene length statistics are not available for orpham genes — there is no pham distribution to compare against.</div>`;
     return `<div style="padding:8px 12px;background:#fef9c3;border-radius:6px;color:#854d0e;font-size:0.85em">⚠ Gene length stats unavailable — pham may have no members with valid coordinates.</div>`;
   }
   try {
@@ -439,9 +432,17 @@ html`${(() => {
     </tr>`;
 
   const cs = clusterStats;
+  // Strip HTML for clipboard — replace <br> with space, remove remaining tags
+  const plainSentence = sentence.replace(/<br\s*\/?>/gi, ' ').replace(/<[^>]+>/g, '').trim();
+  const escapedPlain  = plainSentence.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+
   let out = `
   <div style="padding:12px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;font-size:0.88em;line-height:1.6">
-    <p style="margin:0 0 8px 0">${sentence}</p>
+    <div style="font-weight:700;color:#1e293b;margin-bottom:2px">Gene length normalcy for pham</div>
+    <div style="margin:0 0 8px 0;display:flex;align-items:flex-start;gap:8px">
+      <span style="flex:1;line-height:1.6">${sentence}</span>
+      ${sentence ? `<button onclick="navigator.clipboard.writeText(this.dataset.text).then(()=>{this.textContent='Copied!';setTimeout(()=>{this.textContent='Copy'},1500)})" data-text="${escapedPlain}" style="flex-shrink:0;padding:2px 10px;border-radius:5px;border:1px solid #cbd5e1;background:#f8fafc;cursor:pointer;font-size:0.82em;font-weight:600;color:#334155;margin-top:2px">Copy</button>` : ''}
+    </div>
     <table style="border-collapse:collapse;width:100%">
       <thead>
         <tr style="border-bottom:2px solid #cbd5e1;font-weight:700;color:#1e293b">
@@ -465,6 +466,75 @@ html`${(() => {
     console.error("Gene length table:", err);
     return `<div style="padding:8px 12px;background:#fee2e2;border-radius:6px;color:#b91c1c;font-size:0.8em;white-space:pre-wrap;font-family:monospace">⚠ Gene length table error:\n${err?.stack ?? String(err)}</div>`;
   }
+})()}`
+```
+
+## ── CELL 7b: syntenic function frequency table ─────────────────────────────
+
+```js
+html`${(() => {
+  if (result.status !== "ok" || result.rows.length === 0) return "";
+
+  const { rows, isOrpham, refPham } = result;
+  const total = rows.length;
+
+  // Tally function calls broken down by synteny type
+  const tally = new Map();
+  for (const r of rows) {
+    const fn = r.genefunction?.trim() || "NKF";
+    if (!tally.has(fn)) tally.set(fn, { total: 0, two: 0, up: 0, dn: 0 });
+    const t = tally.get(fn);
+    t.total++;
+    if (r.twoSided)     t.two++;
+    else if (r.upMatch) t.up++;
+    else                t.dn++;
+  }
+
+  // Sort: two-sided count desc → total desc → alpha
+  const sorted = [...tally.entries()].sort(([a, at], [b, bt]) =>
+    bt.two - at.two || bt.total - at.total || a.localeCompare(b)
+  );
+
+  const pct = (n) => n > 0 ? `${n} <span style="color:#94a3b8">(${Math.round(100 * n / total)}%)</span>` : `<span style="color:#cbd5e1">—</span>`;
+
+  const title = isOrpham
+    ? `Functions at this genomic position <small style="font-weight:400;color:#64748b">(genes occupying the orpham's slot in syntenic phages)</small>`
+    : `Functions called for pham ${refPham} in syntenic phages`;
+
+  const uninformative = new Set(["nkf", "hypothetical protein", "no known function"]);
+  const fnRows = sorted.map(([fn, t]) => {
+    const pct_val = t.total / total;
+    const informative = !uninformative.has(fn.toLowerCase());
+    const bg = (informative && pct_val > 0.50) ? '#bbf7d0'   // deep green  > 50%
+             : (informative && pct_val > 0.25) ? '#dcfce7'   // mid green   > 25%
+             : (informative && pct_val > 0.10) ? '#f0fdf4'   // pale green  > 10%
+             : '';
+    const bold = informative && pct_val > 0.25;
+    return `<tr style="${bg ? `background:${bg}` : ''}">
+      <td style="padding:5px 10px;${bold ? 'font-weight:600' : ''}">${fn}</td>
+      <td style="padding:5px 10px;text-align:right">${pct(t.two)}</td>
+      <td style="padding:5px 10px;text-align:right">${pct(t.up)}</td>
+      <td style="padding:5px 10px;text-align:right">${pct(t.dn)}</td>
+      <td style="padding:5px 10px;text-align:right;font-weight:600">${pct(t.total)}</td>
+    </tr>`;
+  }).join("");
+
+  return `
+  <div style="padding:12px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0;font-size:0.88em;line-height:1.6;margin-top:10px">
+    <div style="font-weight:700;color:#1e293b;margin-bottom:2px">${title}</div>
+    <table style="border-collapse:collapse;width:100%">
+      <thead>
+        <tr style="border-bottom:2px solid #cbd5e1;color:#64748b;font-size:0.9em">
+          <th style="padding:5px 10px;text-align:left;font-weight:600">Function</th>
+          <th style="padding:5px 10px;text-align:right;font-weight:600">🔗 Two-sided</th>
+          <th style="padding:5px 10px;text-align:right;font-weight:600">↑ Upstream only</th>
+          <th style="padding:5px 10px;text-align:right;font-weight:600">↓ Downstream only</th>
+          <th style="padding:5px 10px;text-align:right;font-weight:600">Total (n=${total})</th>
+        </tr>
+      </thead>
+      <tbody style="color:#334155">${fnRows}</tbody>
+    </table>
+  </div>`;
 })()}`
 ```
 
@@ -609,6 +679,12 @@ html`${(() => {
     ? `<span style="color:#dc2626;font-weight:700" title="Reverse strand">←</span>`
     : `<span style="color:#2563eb;font-weight:700" title="Forward strand">→</span>`;
 
+  const orphamBanner = isOrpham ? `
+  <div style="padding:10px 14px;background:#fff7ed;border-radius:8px;border:1px solid #fed7aa;color:#92400e;font-size:0.88em;margin-bottom:10px">
+    <strong>⚠ Orpham gene</strong> — this gene's pham has no other members.
+    The results below show other phages that carry a gene in the same genomic neighbourhood (flanked by the same upstream and/or downstream phams), but <strong>that gene may be entirely unrelated</strong>.
+  </div>` : "";
+
   // Build HTML (no <script> tags — event listeners attached via JS below)
   let html_out = `
   <style>
@@ -628,6 +704,7 @@ html`${(() => {
     .sfbtn.active { background:#1e293b; color:#f8fafc; border-color:#1e293b; }
     .gene-fn { color:#64748b; font-size:0.8em; display:block; margin-top:1px; }
   </style>
+  ${orphamBanner}
   <div style="margin-bottom:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
     <span style="font-size:0.82em;color:#64748b;margin-right:2px">Synteny:</span>
     <button class="sfbtn active" data-ftype="syn" data-filter="all" >All (${rows.length})</button>
