@@ -155,7 +155,7 @@ result = {
     const refDnFunc = (dnIdx >= 0 && dnIdx < genes.length) ? (genes[dnIdx].genefunction || "") : "";
 
     const effectiveStart  = (customStart != null && !isNaN(customStart)) ? customStart : refGene.start;
-    const refGeneLength   = Math.abs(refGene.stop - effectiveStart);
+    const refGeneLength   = Math.abs(refGene.stop - effectiveStart) + 1;
     const refPhageCluster       = refPhage.clusterSubcluster || refPhage.cluster || null;
     const refPhageParentCluster = refPhage.cluster || null;
     var isOrpham    = false;
@@ -283,14 +283,14 @@ result = {
       );
 
       // Compute pham-wide statistics
-      const allLengths = phamGenes.map(g => Math.abs(g.stop - g.start)).filter(l => l > 0);
+      const allLengths = phamGenes.map(g => Math.abs(g.stop - g.start) + 1).filter(l => l > 0);
       const clusterLengths = phamGenes
         .filter(g => {
           if (g.phageID === pn) return true;
           const m = phageData.get(g.phageID);
           return m && m.cluster === refPhageCluster;
         })
-        .map(g => Math.abs(g.stop - g.start))
+        .map(g => Math.abs(g.stop - g.start) + 1)
         .filter(l => l > 0);
 
       const computeStats = (lengths) => {
