@@ -413,7 +413,12 @@ html`${(() => {
       // Mode match is the most meaningful result — lead with it
       sentence = `This gene (${fmt(refGeneLength)}) <strong>matches the mode</strong> for ${cmpLabel} — `
                + `${cmpStats.modeFreqPct}% of members share this exact length.`;
-    } else if (cmpStats.stdDev > 0) {
+    } else if (cmpStats.stdDev === 0) {
+      // All members share the same length but this gene differs
+      const exactScope = useCluster ? `${refPhageCluster} cluster pham members` : `pham ${result.refPham} members`;
+      sentence = `This gene (${fmt(refGeneLength)}) is <strong>notably atypical for ${cmpLabel}</strong> — `
+               + `all ${cmpStats.count} ${exactScope} share a length of ${fmt(cmpStats.mode)}.`;
+    } else {
       const z = (refGeneLength - cmpStats.mean) / cmpStats.stdDev;
       const verdict = Math.abs(z) < 0.5 ? "typical for"
                     : Math.abs(z) < 1.0 ? "slightly atypical for"
