@@ -70,13 +70,21 @@ viewof formData = {
 Once you've logged in, you should see a selector appear below:
 ```
 
-## ── CELL 7: Phage selection heading ─────────────────────────────────────────
+## ── CELL 7: dataset selector ────────────────────────────────────────────────
+```js
+viewof dataset = Inputs.select(user.datasets.sort(), {
+  label: "Select a data set",
+  value: "Actino_Draft"
+})
+```
+
+## ── CELL 8: Phage selection heading ─────────────────────────────────────────
 
 ```md
 ## Step 2: Select your gene of interest
 ```
 
-## ── CELL 8: phage name input ───────────────────────────────────────────────
+## ── CELL 9: phage name input ───────────────────────────────────────────────
 
 ```js
 viewof phageName = Inputs.text({
@@ -87,7 +95,7 @@ viewof phageName = Inputs.text({
 ```
 
 
-## ── CELL 9: fetch reference phage ─────────────────────────────────────────
+## ── CELL 10: fetch reference phage ─────────────────────────────────────────
 
 ```js
 refPhageResult = {
@@ -116,7 +124,7 @@ refPhageResult = {
 }
 ```
 
-## ── CELL 10: gene selector ─────────────────────────────────────────────────
+## ── CELL 11: gene selector ─────────────────────────────────────────────────
 
 ```js
 viewof selectedGene = {
@@ -130,7 +138,7 @@ viewof selectedGene = {
 }
 ```
 
-## ── CELL 11: start site override ───────────────────────────────────────────
+## ── CELL 12: start site override ───────────────────────────────────────────
 
 ```js
 viewof customStart = {
@@ -162,7 +170,7 @@ viewof customStart = {
 }
 ```
 
-## ── CELL 12: core data-fetching logic ───────────────────────────────────────
+## ── CELL 13: core data-fetching logic ───────────────────────────────────────
 ```js
 result = {
   const pn = phageName?.trim().replace(/_Draft$/i, "");
@@ -408,14 +416,14 @@ result = {
 }
 ```
 
-## ── CELL 13: results heading ─────────────────────────────────────────────────
+## ── CELL 14: results heading ─────────────────────────────────────────────────
 
 ```md
 ## Results
 ```
 
 
-## ── CELL 14: summary badges ─────────────────────────────────────────────────
+## ── CELL 15: summary badges ─────────────────────────────────────────────────
 
 ```js
 html`${(() => {
@@ -461,7 +469,7 @@ html`${(() => {
 })()}`
 ```
 
-## ── CELL 15: pham metadata summary ─────────────────────────────────────────
+## ── CELL 16: pham metadata summary ─────────────────────────────────────────
 
 ```js
 html`${(() => {
@@ -555,7 +563,7 @@ html`${(() => {
 })()}`
 ```
 
-## ── CELL 16: syntenic function frequency table ─────────────────────────────
+## ── CELL 17: syntenic function frequency table ─────────────────────────────
 
 ```js
 html`${(() => {
@@ -624,7 +632,7 @@ html`${(() => {
 })()}`
 ```
 
-## ── CELL 17: synteny statement generator ────────────────────────────────────
+## ── CELL 18: synteny statement generator ────────────────────────────────────
 
 ```js
 {
@@ -725,7 +733,7 @@ html`${(() => {
 }
 ```
 
-## ── CELL 18: synteny table ──────────────────────────────────────────────────
+## ── CELL 19: synteny table ──────────────────────────────────────────────────
 
 ```js
 {
