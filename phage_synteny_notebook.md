@@ -249,9 +249,17 @@ result = {
     const rows = [];
     let phamStats = null, clusterStats = null, phamExactCount = 0, clusterExactCount = 0;
 
-    const phamGenes = await getPhameratorData(
-      dataset, `/phamily/${refPham}`, user.email, user.password, signal
-    );
+    let phamGenes;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+      phamGenes = await getPhameratorData(
+        dataset, `/phamily/${refPham}`, user.email, user.password, signal
+      );
+      if (phamGenes && phamGenes.length > 0) break;
+      if (attempt < 4) await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+    }
+    if (!phamGenes || phamGenes.length === 0)
+      throw new Error(`Phamerator returned no data for pham ${refPham} after 5 attempts — the server may be having issues. Try refreshing the page.`);
     const members = phamGenes.filter(g => g.phageID !== pn);
 
     if (members.length === 0) {
