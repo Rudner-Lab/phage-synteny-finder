@@ -5,16 +5,67 @@ Observable notebook source — paste each cell into a new cell in observablehq.c
 
 ```md
 # 🧬 Phage Genome Annotation – Synteny Helper
-
 Enter a phage name and select a gene. This tool queries [Phamerator](https://phamerator.org) to find every other phage in the database that shares the same pham in a conserved genomic neighbourhood, then summarises the results for annotation.
 
 **What you get:**
 - **Synteny table** — all syntenic genes grouped by cluster, filterable by synteny type and strand direction. Draft genomes are flagged 🚧.
 - **Gene length statistics** — pham-wide and cluster-specific distributions (mean, mode, SD), with context on how typical your gene's length is.
 - **Suggested annotation statement** — auto-generated from neighbour gene functions, ready to copy.
+
+## Step 1: Log in to phamerator
 ```
 
-## ── CELL 2: phage name input ───────────────────────────────────────────────
+## ── CELL 2: Phamerator imports  ───────────────────────────────────────────────
+```js
+import {
+  terms,
+  getPhameratorData,
+  user,
+  formWithSubmit,
+  styles
+} with { formData } from "@scresawn/phamerator-api-utilities"
+```
+
+## ── CELL 3: Phamerator terms ───────────────────────────────────────────────
+
+```js
+terms
+```
+
+## ── CELL 4: Phamerator login ───────────────────────────────────────────────
+```js
+viewof formData = {
+  let formData = "Signed In";
+  formData = formWithSubmit(html`
+  <form id="login-form" class="login-form">
+  <h4>Phamerator.org Login</h4>
+    <div class="flex-input">
+      <label for="email">Email</label>
+      <input name="email" type="email" value="">
+    </div>
+    <div class="flex-input">
+      <label for="password">Password</label>
+      <input name="password" type="password" value="">
+    </div>
+    <div><input name="submit" type="submit" value="LOGIN"></div>
+  </form>
+`);
+  return formData;
+}
+```
+
+## ── CELL 5: phage name input ───────────────────────────────────────────────
+```md
+Once you've logged in, you should see a selector appear below:
+```
+
+## ── CELL 6: Phage selection heading ─────────────────────────────────────────
+
+```md
+## Step 2: Select your gene of interest
+```
+
+## ── CELL 7: phage name input ───────────────────────────────────────────────
 
 ```js
 viewof phageName = Inputs.text({
@@ -24,7 +75,8 @@ viewof phageName = Inputs.text({
 })
 ```
 
-## ── CELL 3: fetch reference phage ─────────────────────────────────────────
+
+## ── CELL 8: fetch reference phage ─────────────────────────────────────────
 
 ```js
 refPhageResult = {
@@ -49,7 +101,7 @@ refPhageResult = {
 }
 ```
 
-## ── CELL 4: gene selector ──────────────────────────────────────────────────
+## ── CELL 9: gene selector ──────────────────────────────────────────────────
 
 ```js
 viewof selectedGene = {
@@ -63,7 +115,7 @@ viewof selectedGene = {
 }
 ```
 
-## ── CELL 4b: start site override ───────────────────────────────────────────
+## ── CELL 10: start site override ───────────────────────────────────────────
 
 ```js
 viewof customStart = {
@@ -95,7 +147,7 @@ viewof customStart = {
 }
 ```
 
-## ── CELL 5: core data-fetching logic ───────────────────────────────────────
+## ── CELL 11: core data-fetching logic ───────────────────────────────────────
 ```js
 result = {
   const pn = phageName?.trim().replace(/_Draft$/i, "");
@@ -337,7 +389,14 @@ result = {
 }
 ```
 
-## ── CELL 6: summary badges ─────────────────────────────────────────────────
+## ── CELL 12: results heading ─────────────────────────────────────────────────
+
+```md
+## Results
+```
+
+
+## ── CELL 13: summary badges ─────────────────────────────────────────────────
 
 ```js
 html`${(() => {
@@ -383,7 +442,7 @@ html`${(() => {
 })()}`
 ```
 
-## ── CELL 7: pham metadata summary ─────────────────────────────────────────
+## ── CELL 14: pham metadata summary ─────────────────────────────────────────
 
 ```js
 html`${(() => {
@@ -477,7 +536,7 @@ html`${(() => {
 })()}`
 ```
 
-## ── CELL 7b: syntenic function frequency table ─────────────────────────────
+## ── CELL 15: syntenic function frequency table ─────────────────────────────
 
 ```js
 html`${(() => {
@@ -546,7 +605,7 @@ html`${(() => {
 })()}`
 ```
 
-## ── CELL 8: synteny statement generator ────────────────────────────────────
+## ── CELL 16: synteny statement generator ────────────────────────────────────
 
 ```js
 {
@@ -647,7 +706,7 @@ html`${(() => {
 }
 ```
 
-## ── CELL 9: synteny table ──────────────────────────────────────────────────────
+## ── CELL 17: synteny table ──────────────────────────────────────────────────────
 
 ```js
 {
