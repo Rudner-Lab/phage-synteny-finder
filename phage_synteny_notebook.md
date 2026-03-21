@@ -15,24 +15,35 @@ Enter a phage name and select a gene. This tool queries [Phamerator](https://pha
 ## Step 1: Log in to phamerator
 ```
 
-## ── CELL 2: Phamerator imports  ───────────────────────────────────────────────
+## ── CELL 2: Phamerator imports ─────────────────────────────────────────────
 ```js
 import {
   terms,
-  getPhameratorData,
   user,
   formWithSubmit,
   styles
 } with { formData } from "@scresawn/phamerator-api-utilities"
 ```
 
-## ── CELL 3: Phamerator terms ───────────────────────────────────────────────
+## ── CELL 3: Abortable Phamerator API func ──────────────────────────────────
+```js
+getPhameratorData = (dataset, endpoint, email, password, signal) => {
+  return d3.json(`https://phamerator.org/api/${dataset}${endpoint}`, {
+    headers: new Headers({
+      Authorization: `Basic ${btoa(`${email}:${password}`)}`
+    }),
+    signal
+  });
+}
+```
+
+## ── CELL 4: Phamerator terms ───────────────────────────────────────────────
 
 ```js
 terms
 ```
 
-## ── CELL 4: Phamerator login ───────────────────────────────────────────────
+## ── CELL 5: Phamerator login ───────────────────────────────────────────────
 ```js
 viewof formData = {
   let formData = "Signed In";
@@ -54,18 +65,18 @@ viewof formData = {
 }
 ```
 
-## ── CELL 5: phage name input ───────────────────────────────────────────────
+## ── CELL 6: post-login hint ────────────────────────────────────────────────
 ```md
 Once you've logged in, you should see a selector appear below:
 ```
 
-## ── CELL 6: Phage selection heading ─────────────────────────────────────────
+## ── CELL 7: Phage selection heading ─────────────────────────────────────────
 
 ```md
 ## Step 2: Select your gene of interest
 ```
 
-## ── CELL 7: phage name input ───────────────────────────────────────────────
+## ── CELL 8: phage name input ───────────────────────────────────────────────
 
 ```js
 viewof phageName = Inputs.text({
@@ -76,14 +87,18 @@ viewof phageName = Inputs.text({
 ```
 
 
-## ── CELL 8: fetch reference phage ─────────────────────────────────────────
+## ── CELL 9: fetch reference phage ─────────────────────────────────────────
 
 ```js
 refPhageResult = {
+  const controller = new AbortController();
+  invalidation.then(() => controller.abort());
+  const signal = controller.signal;
+
   const fetchGenome = async (name) => {
-    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password);
+    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password, signal);
     if (data) return { data, isDraft: false };
-    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password);
+    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password, signal);
     return { data: draftData, isDraft: !!draftData };
   };
   const pn = phageName?.trim().replace(/_Draft$/i, "");
@@ -101,7 +116,7 @@ refPhageResult = {
 }
 ```
 
-## ── CELL 9: gene selector ──────────────────────────────────────────────────
+## ── CELL 10: gene selector ─────────────────────────────────────────────────
 
 ```js
 viewof selectedGene = {
@@ -115,7 +130,7 @@ viewof selectedGene = {
 }
 ```
 
-## ── CELL 10: start site override ───────────────────────────────────────────
+## ── CELL 11: start site override ───────────────────────────────────────────
 
 ```js
 viewof customStart = {
@@ -147,15 +162,19 @@ viewof customStart = {
 }
 ```
 
-## ── CELL 11: core data-fetching logic ───────────────────────────────────────
+## ── CELL 12: core data-fetching logic ───────────────────────────────────────
 ```js
 result = {
   const pn = phageName?.trim().replace(/_Draft$/i, "");
 
+  const controller = new AbortController();
+  invalidation.then(() => controller.abort());
+  const signal = controller.signal;
+
   const fetchGenome = async (name) => {
-    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password);
+    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password, signal);
     if (data) return { data, isDraft: false };
-    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password);
+    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password, signal);
     return { data: draftData, isDraft: !!draftData };
   };
 
@@ -223,7 +242,7 @@ result = {
     let phamStats = null, clusterStats = null, phamExactCount = 0, clusterExactCount = 0;
 
     const phamGenes = await getPhameratorData(
-      dataset, `/phamily/${refPham}`, user.email, user.password
+      dataset, `/phamily/${refPham}`, user.email, user.password, signal
     );
     const members = phamGenes.filter(g => g.phageID !== pn);
 
@@ -236,8 +255,8 @@ result = {
                       phamExactCount: 0, clusterExactCount: 0, rows: [] });
 
       const [upPhamGenes, dnPhamGenes] = await Promise.all([
-        refUpPham ? getPhameratorData(dataset, `/phamily/${refUpPham}`, user.email, user.password) : Promise.resolve([]),
-        refDnPham ? getPhameratorData(dataset, `/phamily/${refDnPham}`, user.email, user.password) : Promise.resolve([])
+        refUpPham ? getPhameratorData(dataset, `/phamily/${refUpPham}`, user.email, user.password, signal) : Promise.resolve([]),
+        refDnPham ? getPhameratorData(dataset, `/phamily/${refDnPham}`, user.email, user.password, signal) : Promise.resolve([])
       ]);
 
       const candidatePhageIds = [...new Set([
@@ -389,14 +408,14 @@ result = {
 }
 ```
 
-## ── CELL 12: results heading ─────────────────────────────────────────────────
+## ── CELL 13: results heading ─────────────────────────────────────────────────
 
 ```md
 ## Results
 ```
 
 
-## ── CELL 13: summary badges ─────────────────────────────────────────────────
+## ── CELL 14: summary badges ─────────────────────────────────────────────────
 
 ```js
 html`${(() => {
@@ -442,7 +461,7 @@ html`${(() => {
 })()}`
 ```
 
-## ── CELL 14: pham metadata summary ─────────────────────────────────────────
+## ── CELL 15: pham metadata summary ─────────────────────────────────────────
 
 ```js
 html`${(() => {
@@ -536,7 +555,7 @@ html`${(() => {
 })()}`
 ```
 
-## ── CELL 15: syntenic function frequency table ─────────────────────────────
+## ── CELL 16: syntenic function frequency table ─────────────────────────────
 
 ```js
 html`${(() => {
@@ -605,7 +624,7 @@ html`${(() => {
 })()}`
 ```
 
-## ── CELL 16: synteny statement generator ────────────────────────────────────
+## ── CELL 17: synteny statement generator ────────────────────────────────────
 
 ```js
 {
@@ -706,7 +725,7 @@ html`${(() => {
 }
 ```
 
-## ── CELL 17: synteny table ──────────────────────────────────────────────────────
+## ── CELL 18: synteny table ──────────────────────────────────────────────────
 
 ```js
 {
