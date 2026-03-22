@@ -117,10 +117,15 @@ refPhageResult = {
   };
   if (!pn)
     return mkEl({ data: null, isDraft: false }, "─ enter a phage name", "#94a3b8");
-  const r = await fetchGenome(pn);
-  return r?.data
-    ? mkEl({ data: r.data, isDraft: r.isDraft }, `✓ ${pn} loaded`, "#16a34a")
-    : mkEl({ data: null, isDraft: false }, `✗ ${pn} not found on Phamerator`, "#dc2626");
+  try {
+    const r = await fetchGenome(pn);
+    return r?.data
+      ? mkEl({ data: r.data, isDraft: r.isDraft }, `✓ ${pn} loaded`, "#16a34a")
+      : mkEl({ data: null, isDraft: false }, `✗ ${pn} not found on Phamerator`, "#dc2626");
+  } catch (err) {
+    if (err.name === "AbortError") throw err;
+    return mkEl({ data: null, isDraft: false }, `✗ Error loading ${pn}: ${err.message}`, "#dc2626");
+  }
 }
 ```
 
