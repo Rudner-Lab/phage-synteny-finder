@@ -749,6 +749,29 @@ html`${(() => {
   const { rows, refUpPham, refDnPham, isOrpham } = result;
   const phamUrl = (p) => `https://phagesdb.org/phams/${encodeURIComponent(p)}/`;
 
+  // Scoped styles — removed when the cell re-runs to avoid accumulation
+  const uid = `syn-${Date.now().toString(36)}`;
+  const styleEl = document.createElement('style');
+  styleEl.textContent = `
+    #${uid} .syn-tbl { border-collapse: collapse; width: 100%; font-size: 0.88em; }
+    #${uid} .syn-tbl th { padding: 7px 12px; background: #1e293b; color: #f8fafc;
+                    text-align: left; position: sticky; top: 0; z-index: 1; }
+    #${uid} .syn-tbl td { padding: 6px 12px; border-bottom: 1px solid #e2e8f0; }
+    #${uid} .syn-tbl tr:hover td { background: #f1f5f9 !important; }
+    #${uid} .syn-tbl .grp-hdr td { background: #f1f5f9; font-weight: 700; cursor: pointer;
+                              color: #334155; padding: 4px 12px;
+                              border-top: 2px solid #cbd5e1; font-size:0.85em; user-select:none; }
+    #${uid} .syn-tbl .grp-hdr:hover td { background: #e2e8f0 !important; }
+    #${uid} .syn-tbl td a { color: #2563eb; text-decoration: none; }
+    #${uid} .syn-tbl td a:hover { text-decoration: underline; }
+    #${uid} .sfbtn { padding:4px 12px; border-radius:6px; border:1px solid #cbd5e1;
+               background:#f8fafc; cursor:pointer; font-size:0.82em; font-weight:600; }
+    #${uid} .sfbtn.active { background:#1e293b; color:#f8fafc; border-color:#1e293b; }
+    #${uid} .gene-fn { color:#64748b; font-size:0.8em; display:block; margin-top:1px; }
+  `;
+  document.head.appendChild(styleEl);
+  invalidation.then(() => styleEl.remove());
+
   const nTwo  = rows.filter(r => r.twoSided).length;
   const nUp   = rows.filter(r => !r.twoSided && r.upMatch).length;
   const nDown = rows.filter(r => !r.twoSided && r.dnMatch).length;
@@ -788,23 +811,6 @@ html`${(() => {
 
   // Build HTML (no <script> tags — event listeners attached via JS below)
   let html_out = `
-  <style>
-    .syn-tbl { border-collapse: collapse; width: 100%; font-size: 0.88em; }
-    .syn-tbl th { padding: 7px 12px; background: #1e293b; color: #f8fafc;
-                  text-align: left; position: sticky; top: 0; z-index: 1; }
-    .syn-tbl td { padding: 6px 12px; border-bottom: 1px solid #e2e8f0; }
-    .syn-tbl tr:hover td { background: #f1f5f9 !important; }
-    .syn-tbl .grp-hdr td { background: #f1f5f9; font-weight: 700; cursor: pointer;
-                            color: #334155; padding: 4px 12px;
-                            border-top: 2px solid #cbd5e1; font-size:0.85em; user-select:none; }
-    .syn-tbl .grp-hdr:hover td { background: #e2e8f0 !important; }
-    .syn-tbl td a { color: #2563eb; text-decoration: none; }
-    .syn-tbl td a:hover { text-decoration: underline; }
-    .sfbtn { padding:4px 12px; border-radius:6px; border:1px solid #cbd5e1;
-             background:#f8fafc; cursor:pointer; font-size:0.82em; font-weight:600; }
-    .sfbtn.active { background:#1e293b; color:#f8fafc; border-color:#1e293b; }
-    .gene-fn { color:#64748b; font-size:0.8em; display:block; margin-top:1px; }
-  </style>
   ${orphamBanner}
   <div style="margin-bottom:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
     <span style="font-size:0.82em;color:#64748b;margin-right:2px">Synteny:</span>
@@ -862,6 +868,7 @@ html`${(() => {
 
   // Create DOM node and wire up event listeners
   const wrap = document.createElement('div');
+  wrap.id = uid;
   wrap.innerHTML = html_out;
   const tbody = wrap.querySelector('tbody');
 
