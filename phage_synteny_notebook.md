@@ -237,9 +237,8 @@ result = {
     const refGeneLength   = Math.abs(refGene.stop - effectiveStart) + 1;
     const refPhageCluster       = refPhage.clusterSubcluster || refPhage.cluster || null;
     const refPhageParentCluster = refPhage.cluster || null;
-    var isOrpham    = false;
     const base = {
-      status: "ok", phageName: pn, geneNumber, refDir, isOrpham,
+      status: "ok", phageName: pn, geneNumber, refDir, isOrpham: false,
       refGeneFunc, refUpFunc, refDnFunc,
       refPham, refUpPham, refDnPham,
       refGeneLength, refPhageCluster, refPhageParentCluster
@@ -436,7 +435,7 @@ result = {
 ```js
 html`${(() => {
   if (result.status === "idle")
-    return `<p style="color:#888">Enter a phage name and gene number, then click <strong>Find syntenic genes</strong>.</p>`;
+    return `<p style="color:#888">Enter a phage name and gene number</strong>.</p>`;
   if (result.status === "error")
     return `<div style="padding:10px;background:#fee2e2;border-radius:6px;color:#b91c1c">⚠️ ${result.message}</div>`;
 
@@ -669,7 +668,7 @@ html`${(() => {
       const p = best(twoSided);
       statement = `${fn(refGeneFunc)}. Upstream gene is ${fn(refUpFunc)}, downstream gene is ${fn(refDnFunc)}, synteny with phage ${p.phage}.`;
     } else {
-      statement = "No synteny";
+      statement = "No synteny.";
     }
   } else if (twoSided.length > 0) {
     // Both sides match in a single phage
@@ -729,7 +728,7 @@ html`${(() => {
   });
   btnRow.appendChild(copyBtn);
 
-  if (missing.length > 0 && statement != "No synteny") {
+  if (missing.length > 0 && statement !== "No synteny.") {
     const warn = document.createElement('span');
     warn.style.cssText = "color:#92400e;font-size:0.82em";
     warn.textContent = `⚠ No function data for: ${missing.join(", ")} — replace NKF manually.`;
