@@ -253,17 +253,21 @@ result = {
     const rows = [];
     let phamStats = null, clusterStats = null, phamExactCount = 0, clusterExactCount = 0;
 
-    let phamGenes;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-      phamGenes = await getPhameratorData(
-        dataset, `/phamily/${refPham}`, user.email, user.password, signal
-      );
-      if (phamGenes && phamGenes.length > 0) break;
-      if (attempt < 4) await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
-    }
-    if (!phamGenes || phamGenes.length === 0)
-      throw new Error(`Phamerator returned no data for pham ${refPham} after 5 attempts — the server may be having issues. Try refreshing the page.`);
+    // Retry helper — throws if the phamily endpoint returns empty after all attempts
+    const fetchPhamWithRetry = async (phamName) => {
+      let genes;
+      for (let attempt = 0; attempt < 5; attempt++) {
+        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+        genes = await getPhameratorData(dataset, `/phamily/${phamName}`, user.email, user.password, signal);
+        if (genes && genes.length > 0) break;
+        if (attempt < 4) await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
+      }
+      if (!genes || genes.length === 0)
+        throw new Error(`Phamerator returned no data for pham ${phamName} after 5 attempts — the server may be having issues. Try refreshing the page.`);
+      return genes;
+    };
+
+    const phamGenes = await fetchPhamWithRetry(refPham);
     const members = phamGenes.filter(g => g.phageID !== pn);
 
     if (members.length === 0) {
@@ -275,8 +279,8 @@ result = {
                       phamExactCount: 0, clusterExactCount: 0, rows: [] });
 
       const [upPhamGenes, dnPhamGenes] = await Promise.all([
-        refUpPham ? getPhameratorData(dataset, `/phamily/${refUpPham}`, user.email, user.password, signal) : Promise.resolve([]),
-        refDnPham ? getPhameratorData(dataset, `/phamily/${refDnPham}`, user.email, user.password, signal) : Promise.resolve([])
+        refUpPham ? fetchPhamWithRetry(refUpPham) : Promise.resolve([]),
+        refDnPham ? fetchPhamWithRetry(refDnPham) : Promise.resolve([])
       ]);
 
       const candidatePhageIds = [...new Set([
