@@ -179,6 +179,7 @@ viewof customStart = {
 ```js
 result = {
   const pn = phageName?.trim().replace(/_Draft$/i, "");
+  const samePhage = (id) => id?.replace(/_Draft$/i, "").toLowerCase() === pn?.toLowerCase();
 
   const controller = new AbortController();
   invalidation.then(() => controller.abort());
@@ -268,7 +269,7 @@ result = {
     };
 
     const phamGenes = await fetchPhamWithRetry(refPham);
-    const members = phamGenes.filter(g => g.phageID !== pn);
+    const members = phamGenes.filter(g => !samePhage(g.phageID));
 
     if (members.length === 0) {
       base.isOrpham = true;
@@ -286,7 +287,7 @@ result = {
       const candidatePhageIds = [...new Set([
         ...(upPhamGenes || []).map(g => g.phageID),
         ...(dnPhamGenes || []).map(g => g.phageID)
-      ].filter(id => id !== pn))];
+      ].filter(id => !samePhage(id)))];
 
       // Fetch all candidate phage genomes in parallel
       await Promise.all(
@@ -381,7 +382,7 @@ result = {
       const allLengths = phamGenes.map(g => Math.abs(g.stop - g.start) + 1).filter(l => l > 0);
       const clusterLengths = phamGenes
         .filter(g => {
-          if (g.phageID === pn) return true;
+          if (samePhage(g.phageID)) return true;
           const m = phageData.get(g.phageID);
           return m && m.cluster === refPhageCluster;
         })
