@@ -134,7 +134,7 @@ refPhageResult = {
 ```js
 viewof selectedGene = {
   const genes = refPhageResult?.data?.genes
-    ? [...refPhageResult.data.genes].sort((a, b) => (a.stop || 0) - (b.stop || 0))
+    ? [...refPhageResult.data.genes].sort((a, b) => Number(a.name) - Number(b.name))
     : [];
   return Inputs.select(genes, {
     label: "Gene",
