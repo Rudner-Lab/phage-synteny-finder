@@ -592,7 +592,7 @@ html`${(() => {
   // Tally function calls broken down by synteny type
   const tally = new Map();
   for (const r of rows) {
-    const fn = r.genefunction?.trim() || "NKF";
+    const fn = r.genefunction?.trim() || "Hypothetical protein";
     if (!tally.has(fn)) tally.set(fn, { total: 0, two: 0, up: 0, dn: 0 });
     const t = tally.get(fn);
     t.total++;
@@ -656,7 +656,7 @@ html`${(() => {
   if (result.status !== "ok") return html``;
 
   const { rows, refGeneFunc, refUpFunc, refDnFunc, refPhageCluster, isOrpham } = result;
-  const fn = (f) => f || "NKF";
+  const fn = (f) => f || "[FUNCTION]";
 
   // Pick best comparison phage: same-cluster non-Draft > same-cluster Draft > any non-Draft > any Draft
   const best = (candidates) => {
@@ -741,7 +741,7 @@ html`${(() => {
   if (missing.length > 0 && statement !== "No synteny.") {
     const warn = document.createElement('span');
     warn.style.cssText = "color:#92400e;font-size:0.82em";
-    warn.textContent = `⚠ No function data for: ${missing.join(", ")} — replace NKF manually.`;
+    warn.textContent = `⚠ No function data for: ${missing.join(", ")} — replace [FUNCTION] manually.`;
     btnRow.appendChild(warn);
   }
 
