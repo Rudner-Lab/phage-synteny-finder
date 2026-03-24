@@ -412,8 +412,8 @@ result = {
 
       phamStats    = computeStats(allLengths);
       clusterStats = computeStats(clusterLengths);
-      phamExactCount    = allLengths.filter(l => l === refGeneLength).length;
-      clusterExactCount = clusterLengths.filter(l => l === refGeneLength).length;
+      phamExactCount    = allLengths.filter(l => l === refGeneLength).length - 1;
+      clusterExactCount = clusterLengths.filter(l => l === refGeneLength).length - 1;
     }
 
     rows.sort((a, b) =>
@@ -568,7 +568,7 @@ html`${(() => {
         ${row("Mean ± SD",       `${fmt(phamStats.mean)} ± ${fmt(phamStats.stdDev)}`, cs ? `${fmt(cs.mean)} ± ${fmt(cs.stdDev)}` : "—")}
         ${row("Mode (freq)",      `${fmt(phamStats.mode)} (${phamStats.modeFreqPct}%)`, cs ? `${fmt(cs.mode)} (${cs.modeFreqPct}%)` : "—")}
         ${row("This gene",       `<strong>${fmt(refGeneLength)}</strong>`, `<strong>${fmt(refGeneLength)}</strong>`)}
-        ${row("Same length",     fmtExact(phamExactCount, phamStats.count), cs ? fmtExact(clusterExactCount, cs.count) : "—")}
+        ${row("Others with same length",     fmtExact(phamExactCount, phamStats.count - 1), cs ? (cs.count > 1 ? fmtExact(clusterExactCount, cs.count - 1) : "0") : "—")}
       </tbody>
     </table>
   </div>`;
