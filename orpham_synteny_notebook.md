@@ -282,7 +282,7 @@ scanResult = {
             const dnPham = (cDnIdx >= 0 && cDnIdx < cGenes.length) ? cGenes[cDnIdx].phamName : null;
             const upMatch = refUpPham !== null && upPham === refUpPham;
             const dnMatch = refDnPham !== null && dnPham === refDnPham;
-            if (!upMatch || !dnMatch) continue; // two-sided only
+            if (!upMatch && !dnMatch) continue;
             rows.push({
               phage:         phageId,
               geneNumber:    cGenes[ci].name,
@@ -293,7 +293,8 @@ scanResult = {
               genefunction:  cGenes[ci].genefunction || "",
               candidatePham: cGenes[ci].phamName || null,
               isDraft:       meta.isDraft || false,
-              upPham, dnPham
+              upPham, dnPham, upMatch, dnMatch,
+              twoSided:      upMatch && dnMatch
             });
           }
         }
@@ -354,7 +355,8 @@ html`${(() => {
   if (status === "error")
     return `<div style="padding:10px;background:#fee2e2;border-radius:6px;color:#b91c1c">⚠️ ${scanResult.message}</div>`;
 
-  const withHits = orphams.filter(o => o.rows.length > 0).length;
+  const withTwo = orphams.filter(o => o.rows.some(r => r.twoSided)).length;
+  const withAny = orphams.filter(o => o.rows.length > 0).length;
 
   if (status === "loading") {
     const pct = total > 0 ? Math.round(100 * done / total) : 0;
@@ -364,7 +366,7 @@ html`${(() => {
       <div style="background:#e2e8f0;border-radius:9999px;height:6px;overflow:hidden">
         <div style="background:#2563eb;height:100%;width:${pct}%;transition:width 0.3s"></div>
       </div>
-      ${orphams.length > 0 ? `<div style="margin-top:6px;color:#64748b">${orphams.length} orpham${orphams.length !== 1 ? "s" : ""} processed — ${withHits} with two-sided hits</div>` : ""}
+      ${orphams.length > 0 ? `<div style="margin-top:6px;color:#64748b">${orphams.length} orpham${orphams.length !== 1 ? "s" : ""} processed — ${withTwo} with two-sided hits</div>` : ""}
     </div>`;
   }
 
@@ -388,10 +390,13 @@ html`${(() => {
       🔬 <b>${orphams.length}</b> orpham${orphams.length !== 1 ? "s" : ""}
     </div>
     <div style="padding:8px 16px;background:#faf5ff;border-radius:8px;border:1px solid #e9d5ff">
-      🔗 <b>${withHits}</b> with two-sided synteny
+      🔗 <b>${withTwo}</b> with two-sided synteny
+    </div>
+    <div style="padding:8px 16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0">
+      🔀 <b>${withAny - withTwo}</b> one-sided only
     </div>
     <div style="padding:8px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
-      ⬜ <b>${orphams.length - withHits}</b> no hits
+      ⬜ <b>${orphams.length - withAny}</b> no hits
     </div>
   </div>
   ${warningBanner}`;
@@ -446,7 +451,8 @@ html`${(() => {
   orphams.forEach((o, oi) => {
     const { geneNumber, phamName, direction, genefunction,
             start, stop, refUpPham, refDnPham, refUpFunc, refDnFunc, rows } = o;
-    const nHits = rows.length;
+    const nTwo = rows.filter(r => r.twoSided).length;
+    const nOne = rows.length - nTwo;
 
     const card = document.createElement('div');
     card.className = 'orpham-card';
@@ -469,7 +475,8 @@ html`${(() => {
         <span style="padding:3px 9px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0;color:#15803d;font-size:0.82em">
           ↓ ${refDnPham ? `<a href="${phamUrl(refDnPham)}" target="_blank" style="color:#15803d">${refDnPham}</a>` : "—"}
         </span>
-        ${nHits > 0 ? `<span style="padding:3px 9px;background:#ede9fe;border-radius:6px;color:#5b21b6;font-size:0.82em">🔗 ${nHits} hit${nHits !== 1 ? "s" : ""}</span>` : ""}
+        ${nTwo > 0 ? `<span style="padding:3px 9px;background:#ede9fe;border-radius:6px;color:#5b21b6;font-size:0.82em">🔗 ${nTwo} two-sided</span>` : ""}
+        ${nOne > 0 ? `<span style="padding:3px 9px;background:#f0fdf4;border-radius:6px;color:#166534;font-size:0.82em">🔀 ${nOne} one-sided</span>` : ""}
       </div>`;
     card.appendChild(hdr);
 
@@ -487,47 +494,129 @@ html`${(() => {
     const body = document.createElement('div');
     body.className = 'card-body';
 
-    // ── Function tally ───────────────────────────────────────────────────
-    const total = rows.length;
+    // ── Function tally — only functions corroborated on both sides ────────
+    // A function qualifies if it appears in ≥1 upMatch hit AND ≥1 dnMatch hit
+    // (two-sided hits count for both sides)
+    const upFns = new Set(rows.filter(r => r.upMatch).map(r => r.genefunction?.trim() || "Hypothetical protein"));
+    const dnFns = new Set(rows.filter(r => r.dnMatch).map(r => r.genefunction?.trim() || "Hypothetical protein"));
+    const bothFns = new Set([...upFns].filter(fn => dnFns.has(fn)));
+
     const tally = new Map();
     for (const r of rows) {
       const fn = r.genefunction?.trim() || "Hypothetical protein";
+      if (!bothFns.has(fn)) continue;
       tally.set(fn, (tally.get(fn) || 0) + 1);
     }
+    const tallyTotal = [...tally.values()].reduce((a, b) => a + b, 0);
     const sortedTally = [...tally.entries()].sort(([, a], [, b]) => b - a);
     const uninformative = new Set(["nkf", "hypothetical protein", "no known function"]);
-    const fnRows = sortedTally.map(([fn, n]) => {
-      const v = n / total;
-      const informative = !uninformative.has(fn.toLowerCase());
-      const bg = (informative && v > 0.50) ? '#bbf7d0' : (informative && v > 0.25) ? '#dcfce7' : (informative && v > 0.10) ? '#f0fdf4' : '';
-      const bold = informative && v > 0.25;
-      return `<tr style="${bg ? `background:${bg}` : ''}">
-        <td style="padding:4px 10px;${bold ? 'font-weight:600' : ''}">${fn}</td>
-        <td style="padding:4px 10px;text-align:right;font-weight:600">${n} <span style="color:#94a3b8">(${Math.round(100*v)}%)</span></td>
-      </tr>`;
-    }).join("");
-    const tallyDiv = document.createElement('div');
-    tallyDiv.style.cssText = "margin-bottom:10px";
-    tallyDiv.innerHTML = `
-      <table class="syn-tbl">
-        <thead>
-          <tr style="border-bottom:2px solid #cbd5e1;color:#64748b">
-            <th>Function at this genomic position</th>
-            <th style="text-align:right">Hits (n=${total})</th>
-          </tr>
-        </thead>
-        <tbody style="color:#334155">${fnRows}</tbody>
-      </table>`;
-    body.appendChild(tallyDiv);
 
-    // ── Synteny table (collapsible) ───────────────────────────────────────
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'tbtn';
-    toggleBtn.style.cssText += ";margin-bottom:8px";
-    toggleBtn.textContent = `▸ Show synteny table (${rows.length} row${rows.length !== 1 ? "s" : ""})`;
+    if (sortedTally.length > 0) {
+      const fnRows = sortedTally.map(([fn, n]) => {
+        const v = n / tallyTotal;
+        const informative = !uninformative.has(fn.toLowerCase());
+        const bg = (informative && v > 0.50) ? '#bbf7d0' : (informative && v > 0.25) ? '#dcfce7' : (informative && v > 0.10) ? '#f0fdf4' : '';
+        const bold = informative && v > 0.25;
+        return `<tr style="${bg ? `background:${bg}` : ''}">
+          <td style="padding:4px 10px;${bold ? 'font-weight:600' : ''}">${fn}</td>
+          <td style="padding:4px 10px;text-align:right;font-weight:600">${n} <span style="color:#94a3b8">(${Math.round(100*v)}%)</span></td>
+        </tr>`;
+      }).join("");
+      const tallyDiv = document.createElement('div');
+      tallyDiv.style.cssText = "margin-bottom:10px";
+      tallyDiv.innerHTML = `
+        <div style="font-size:0.82em;color:#64748b;margin-bottom:4px">Functions corroborated on both sides (n=${tallyTotal} hits)</div>
+        <table class="syn-tbl">
+          <thead>
+            <tr style="border-bottom:2px solid #cbd5e1;color:#64748b">
+              <th>Function</th>
+              <th style="text-align:right">Hits</th>
+            </tr>
+          </thead>
+          <tbody style="color:#334155">${fnRows}</tbody>
+        </table>`;
+      body.appendChild(tallyDiv);
+    }
+
+    // ── One-sided context (three-column view) ─────────────────────────────
+    const upOnly = rows.filter(r => r.upMatch && !r.twoSided);
+    const dnOnly = rows.filter(r => r.dnMatch && !r.twoSided);
+    if (upOnly.length > 0 || dnOnly.length > 0) {
+      const upN = upOnly.length, dnN = dnOnly.length;
+      // Collect all functions seen in either side, with per-side counts
+      const oneFns = new Map(); // fn → { up: n, dn: n }
+      for (const r of upOnly) {
+        const fn = r.genefunction?.trim() || "Hypothetical protein";
+        if (!oneFns.has(fn)) oneFns.set(fn, { up: 0, dn: 0 });
+        oneFns.get(fn).up++;
+      }
+      for (const r of dnOnly) {
+        const fn = r.genefunction?.trim() || "Hypothetical protein";
+        if (!oneFns.has(fn)) oneFns.set(fn, { up: 0, dn: 0 });
+        oneFns.get(fn).dn++;
+      }
+      // Sort: functions seen on both sides first, then by total count
+      const sortedOne = [...oneFns.entries()].sort(([, a], [, b]) => {
+        const aShared = a.up > 0 && a.dn > 0 ? 1 : 0;
+        const bShared = b.up > 0 && b.dn > 0 ? 1 : 0;
+        return bShared - aShared || (b.up + b.dn) - (a.up + a.dn);
+      });
+      const pctCell = (n, total) => n > 0
+        ? `${n} <span style="color:#94a3b8">(${Math.round(100*n/total)}%)</span>`
+        : `<span style="color:#cbd5e1">—</span>`;
+      const fnRows = sortedOne.map(([fn, t]) => {
+        const shared = t.up > 0 && t.dn > 0;
+        const informative = !uninformative.has(fn.toLowerCase());
+        const bg = (shared && informative) ? '#f0fdf4' : '';
+        return `<tr style="${bg ? `background:${bg}` : ''}">
+          <td style="padding:4px 10px;${shared && informative ? 'font-weight:600' : ''}">${shared ? '✓ ' : ''}${fn}</td>
+          <td style="padding:4px 10px;text-align:right">${upN > 0 ? pctCell(t.up, upN) : '<span style="color:#cbd5e1">n/a</span>'}</td>
+          <td style="padding:4px 10px;text-align:right">${dnN > 0 ? pctCell(t.dn, dnN) : '<span style="color:#cbd5e1">n/a</span>'}</td>
+        </tr>`;
+      }).join("");
+      const oneSidedToggle = document.createElement('button');
+      oneSidedToggle.className = 'tbtn';
+      oneSidedToggle.style.cssText += ";margin-bottom:8px";
+      oneSidedToggle.textContent = `▸ Show one-sided context (${upN + dnN} hit${upN + dnN !== 1 ? "s" : ""})`;
+
+      const oneSidedWrap = document.createElement('div');
+      oneSidedWrap.style.cssText = "display:none;margin-bottom:10px";
+      oneSidedWrap.innerHTML = `
+        <div style="font-size:0.82em;color:#64748b;margin-bottom:4px">One-sided context <span style="color:#94a3b8">(✓ = function appears on both sides)</span></div>
+        <table class="syn-tbl">
+          <thead>
+            <tr style="border-bottom:2px solid #cbd5e1;color:#64748b">
+              <th>Function</th>
+              <th style="text-align:right">↑ Upstream only (n=${upN})</th>
+              <th style="text-align:right">↓ Downstream only (n=${dnN})</th>
+            </tr>
+          </thead>
+          <tbody style="color:#334155">${fnRows}</tbody>
+        </table>`;
+
+      oneSidedToggle.addEventListener('click', () => {
+        const open = oneSidedWrap.style.display === 'none';
+        oneSidedWrap.style.display = open ? '' : 'none';
+        oneSidedToggle.textContent = open
+          ? `▾ Hide one-sided context (${upN + dnN} hit${upN + dnN !== 1 ? "s" : ""})`
+          : `▸ Show one-sided context (${upN + dnN} hit${upN + dnN !== 1 ? "s" : ""})`;
+      });
+
+      // one-sided section appended after two-sided table (below)
+      body._oneSidedToggle = oneSidedToggle;
+      body._oneSidedWrap   = oneSidedWrap;
+    }
+
+    // ── Two-sided synteny table (expanded by default) ─────────────────────
+    const twoRows = rows.filter(r => r.twoSided);
+    if (twoRows.length === 0) {
+      // No two-sided hits — still append one-sided section if present
+      if (body._oneSidedToggle) { body.appendChild(body._oneSidedToggle); body.appendChild(body._oneSidedWrap); }
+      card.appendChild(body); wrap.appendChild(card); return;
+    }
 
     const groups = new Map();
-    for (const r of rows) {
+    for (const r of twoRows) {
       const key = r.cluster || "Unknown";
       if (!groups.has(key)) groups.set(key, []);
       groups.get(key).push(r);
@@ -568,16 +657,8 @@ html`${(() => {
     tblHtml += `</tbody></table>`;
 
     const tblWrap = document.createElement('div');
-    tblWrap.style.cssText = "display:none;overflow-x:auto;max-height:50vh;overflow-y:auto";
+    tblWrap.style.cssText = "overflow-x:auto;max-height:50vh;overflow-y:auto;margin-bottom:10px";
     tblWrap.innerHTML = tblHtml;
-
-    toggleBtn.addEventListener('click', () => {
-      const open = tblWrap.style.display === 'none';
-      tblWrap.style.display = open ? '' : 'none';
-      toggleBtn.textContent = open
-        ? `▾ Hide synteny table (${rows.length} row${rows.length !== 1 ? "s" : ""})`
-        : `▸ Show synteny table (${rows.length} row${rows.length !== 1 ? "s" : ""})`;
-    });
 
     tblWrap.querySelectorAll('tr.grp-hdr').forEach(hdr => {
       hdr.addEventListener('click', function() {
@@ -589,8 +670,11 @@ html`${(() => {
       });
     });
 
-    body.appendChild(toggleBtn);
     body.appendChild(tblWrap);
+
+    // Append one-sided section after two-sided table
+    if (body._oneSidedToggle) { body.appendChild(body._oneSidedToggle); body.appendChild(body._oneSidedWrap); }
+
     card.appendChild(body);
     wrap.appendChild(card);
   });
