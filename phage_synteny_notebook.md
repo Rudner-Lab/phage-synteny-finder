@@ -185,10 +185,27 @@ result = {
   invalidation.then(() => controller.abort());
   const signal = controller.signal;
 
+  // Polite mode: slower, lower-concurrency API access to reduce server strain.
+  const REQUEST_DELAY_MS = 50;
+  const FETCH_BATCH_SIZE = 4;
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const runBatched = async (items, fn, batchSize = FETCH_BATCH_SIZE) => {
+    for (let i = 0; i < items.length; i += batchSize)
+      await Promise.all(items.slice(i, i + batchSize).map(fn));
+  };
+
+  const politeGet = async (endpoint) => {
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    const response = await getPhameratorData(dataset, endpoint, user.email, user.password, signal);
+    await sleep(REQUEST_DELAY_MS);
+    return response;
+  };
+
   const fetchGenome = async (name) => {
-    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password, signal);
+    const data = await politeGet(`/genome/${encodeURIComponent(name)}/`);
     if (data) return { data, isDraft: false };
-    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password, signal);
+    const draftData = await politeGet(`/genome/${encodeURIComponent(name)}_Draft/`);
     return { data: draftData, isDraft: !!draftData };
   };
 
@@ -254,21 +271,14 @@ result = {
     const rows = [];
     let phamStats = null, clusterStats = null, phamExactCount = 0, clusterExactCount = 0;
 
-    // Retry helper — throws if the phamily endpoint returns empty after all attempts
-    const fetchPhamWithRetry = async (phamName) => {
-      let genes;
-      for (let attempt = 0; attempt < 5; attempt++) {
-        if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-        genes = await getPhameratorData(dataset, `/phamily/${phamName}`, user.email, user.password, signal);
-        if (genes && genes.length > 0) break;
-        if (attempt < 4) await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
-      }
+    const fetchPhamPolite = async (phamName) => {
+      const genes = await politeGet(`/phamily/${phamName}`);
       if (!genes || genes.length === 0)
-        throw new Error(`Phamerator returned no data for pham ${phamName} after 5 attempts — the server may be having issues. Try refreshing the page.`);
+        throw new Error(`Phamerator returned no data for pham ${phamName}.`);
       return genes;
     };
 
-    const phamGenes = await fetchPhamWithRetry(refPham);
+    const phamGenes = await fetchPhamPolite(refPham);
     const members = phamGenes.filter(g => !samePhage(g.phageID));
 
     if (members.length === 0) {
@@ -279,28 +289,23 @@ result = {
         return mkEl({ ...base, phamStats: null, clusterStats: null,
                       phamExactCount: 0, clusterExactCount: 0, rows: [] });
 
-      const [upPhamGenes, dnPhamGenes] = await Promise.all([
-        refUpPham ? fetchPhamWithRetry(refUpPham) : Promise.resolve([]),
-        refDnPham ? fetchPhamWithRetry(refDnPham) : Promise.resolve([])
-      ]);
+      const upPhamGenes = refUpPham ? await fetchPhamPolite(refUpPham) : [];
+      const dnPhamGenes = refDnPham ? await fetchPhamPolite(refDnPham) : [];
 
       const candidatePhageIds = [...new Set([
         ...(upPhamGenes || []).map(g => g.phageID),
         ...(dnPhamGenes || []).map(g => g.phageID)
       ].filter(id => !samePhage(id)))];
 
-      // Fetch all candidate phage genomes in parallel
-      await Promise.all(
-        candidatePhageIds.map(async name => {
-          try {
-            const { data, isDraft } = await fetchGenome(name);
-            phageData.set(name, data
-              ? { cluster: data.clusterSubcluster || data.cluster || "—", parentCluster: data.cluster || null, genes: data.genes, isDraft }
-              : { cluster: "—", parentCluster: null, genes: [], isDraft: false }
-            );
-          } catch { phageData.set(name, { cluster: "—", genes: [], isDraft: false }); }
-        })
-      );
+      await runBatched(candidatePhageIds, async (name) => {
+        try {
+          const { data, isDraft } = await fetchGenome(name);
+          phageData.set(name, data
+            ? { cluster: data.clusterSubcluster || data.cluster || "—", parentCluster: data.cluster || null, genes: data.genes, isDraft }
+            : { cluster: "—", parentCluster: null, genes: [], isDraft: false }
+          );
+        } catch { phageData.set(name, { cluster: "—", genes: [], isDraft: false }); }
+      });
 
       // Scan every gene in each candidate phage for a matching neighborhood
       for (const phageId of candidatePhageIds) {
@@ -333,19 +338,17 @@ result = {
       }
 
     } else {
-      // Fetch phage metadata (cluster/genes) in parallel, deduped by phage
+      // Fetch phage metadata (cluster/genes) with polite batching, deduped by phage
       const uniquePhageNames = [...new Set(members.map(g => g.phageID))];
-      await Promise.all(
-        uniquePhageNames.map(async name => {
-          try {
-            const { data, isDraft } = await fetchGenome(name);
-            phageData.set(name, data
-              ? { cluster: data.clusterSubcluster || data.cluster || "—", parentCluster: data.cluster || null, genes: data.genes, isDraft }
-              : { cluster: "—", parentCluster: null, genes: [], isDraft: false }
-            );
-          } catch { phageData.set(name, { cluster: "—", genes: [] }); }
-        })
-      );
+      await runBatched(uniquePhageNames, async (name) => {
+        try {
+          const { data, isDraft } = await fetchGenome(name);
+          phageData.set(name, data
+            ? { cluster: data.clusterSubcluster || data.cluster || "—", parentCluster: data.cluster || null, genes: data.genes, isDraft }
+            : { cluster: "—", parentCluster: null, genes: [], isDraft: false }
+          );
+        } catch { phageData.set(name, { cluster: "—", genes: [] }); }
+      });
 
       // Evaluate synteny for each member gene
       await Promise.all(

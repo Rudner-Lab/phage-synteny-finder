@@ -139,6 +139,23 @@ scanResult = {
   invalidation.then(() => controller.abort());
   const signal = controller.signal;
 
+  // Polite mode: slower requests and smaller batches to reduce API load.
+  const REQUEST_DELAY_MS = 50;
+  const FETCH_BATCH_SIZE = 4;
+  const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  const runBatched = async (items, fn, batchSize = FETCH_BATCH_SIZE) => {
+    for (let i = 0; i < items.length; i += batchSize)
+      await Promise.all(items.slice(i, i + batchSize).map(fn));
+  };
+
+  const politeGet = async (endpoint) => {
+    if (signal.aborted) throw new DOMException("Aborted", "AbortError");
+    const response = await getPhameratorData(dataset, endpoint, user.email, user.password, signal);
+    await sleep(REQUEST_DELAY_MS);
+    return response;
+  };
+
   if (!pn || !refPhageResult?.data) {
     yield { status: "idle", orphams: [] };
     return;
@@ -151,29 +168,17 @@ scanResult = {
   const refPhageCluster = refPhage.clusterSubcluster || refPhage.cluster || null;
 
   const fetchGenome = async (name) => {
-    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password, signal);
+    const data = await politeGet(`/genome/${encodeURIComponent(name)}/`);
     if (data) return { data, isDraft: false };
-    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password, signal);
+    const draftData = await politeGet(`/genome/${encodeURIComponent(name)}_Draft/`);
     return { data: draftData, isDraft: !!draftData };
   };
 
-  const fetchPhamWithRetry = async (phamName) => {
-    let result;
-    for (let attempt = 0; attempt < 5; attempt++) {
-      if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-      result = await getPhameratorData(dataset, `/phamily/${phamName}`, user.email, user.password, signal);
-      if (result && result.length > 0) break;
-      if (attempt < 4) await new Promise(r => setTimeout(r, 300 * (attempt + 1)));
-    }
+  const fetchPhamPolite = async (phamName) => {
+    const result = await politeGet(`/phamily/${phamName}`);
     if (!result || result.length === 0)
-      throw new Error(`Phamerator returned no data for pham ${phamName} after 5 attempts — try refreshing.`);
+      throw new Error(`Phamerator returned no data for pham ${phamName}.`);
     return result;
-  };
-
-  // Process items in batches of batchSize concurrent requests
-  const runBatched = async (items, fn, batchSize = 5) => {
-    for (let i = 0; i < items.length; i += batchSize)
-      await Promise.all(items.slice(i, i + batchSize).map(fn));
   };
 
   try {
@@ -185,7 +190,7 @@ scanResult = {
 
     const warnings = [];
     await runBatched(uniquePhams, async (phamName) => {
-      try { phamCache.set(phamName, await fetchPhamWithRetry(phamName)); }
+      try { phamCache.set(phamName, await fetchPhamPolite(phamName)); }
       catch (err) { phamCache.set(phamName, []); warnings.push(`Pham ${phamName}: ${err.message}`); }
     });
 
@@ -216,7 +221,7 @@ scanResult = {
     if (extraPhams.length > 0) {
       yield { status: "loading", phase: `Fetching ${extraPhams.length} neighbor phams…`, done: 0, total: extraPhams.length, orphams: [] };
       await runBatched(extraPhams, async (phamName) => {
-        try { phamCache.set(phamName, await fetchPhamWithRetry(phamName)); }
+        try { phamCache.set(phamName, await fetchPhamPolite(phamName)); }
         catch (err) { phamCache.set(phamName, []); warnings.push(`Pham ${phamName}: ${err.message}`); }
       });
     }
