@@ -9,7 +9,7 @@ Enter a phage name. This tool scans every orpham in the phage and, for each one,
 
 **What you get:**
 - **Per-orpham summary** — upstream/downstream pham context and hit counts.
-- **Function tally** — which gene functions appear at that genomic position in syntenic phages.
+- **Function tally** — which functions appear in the central candidate gene at the target genomic slot (between matched flanking phams).
 - **Synteny table** — all syntenic genes grouped by cluster (collapsible per orpham).
 
 ## Step 1: Log in to phamerator
@@ -366,7 +366,7 @@ html`${(() => {
       <div style="background:#e2e8f0;border-radius:9999px;height:6px;overflow:hidden">
         <div style="background:#2563eb;height:100%;width:${pct}%;transition:width 0.3s"></div>
       </div>
-      ${orphams.length > 0 ? `<div style="margin-top:6px;color:#64748b">${orphams.length} orpham${orphams.length !== 1 ? "s" : ""} processed — ${withTwo} with two-sided hits</div>` : ""}
+      ${orphams.length > 0 ? `<div style="margin-top:6px;color:#64748b">${orphams.length} orpham${orphams.length !== 1 ? "s" : ""} processed — ${withTwo} with two-flank support</div>` : ""}
     </div>`;
   }
 
@@ -390,10 +390,10 @@ html`${(() => {
       🔬 <b>${orphams.length}</b> orpham${orphams.length !== 1 ? "s" : ""}
     </div>
     <div style="padding:8px 16px;background:#faf5ff;border-radius:8px;border:1px solid #e9d5ff">
-      🔗 <b>${withTwo}</b> with two-sided synteny
+      🔗 <b>${withTwo}</b> with two-flank support
     </div>
     <div style="padding:8px 16px;background:#f0fdf4;border-radius:8px;border:1px solid #bbf7d0">
-      🔀 <b>${withAny - withTwo}</b> one-sided only
+      🔀 <b>${withAny - withTwo}</b> one-flank only
     </div>
     <div style="padding:8px 16px;background:#f8fafc;border-radius:8px;border:1px solid #e2e8f0">
       ⬜ <b>${orphams.length - withAny}</b> no hits
@@ -475,8 +475,8 @@ html`${(() => {
         <span style="padding:3px 9px;background:#f0fdf4;border-radius:6px;border:1px solid #bbf7d0;color:#15803d;font-size:0.82em">
           ↓ ${refDnPham ? `<a href="${phamUrl(refDnPham)}" target="_blank" style="color:#15803d">${refDnPham}</a>` : "—"}
         </span>
-        ${nTwo > 0 ? `<span style="padding:3px 9px;background:#ede9fe;border-radius:6px;color:#5b21b6;font-size:0.82em">🔗 ${nTwo} two-sided</span>` : ""}
-        ${nOne > 0 ? `<span style="padding:3px 9px;background:#f0fdf4;border-radius:6px;color:#166534;font-size:0.82em">🔀 ${nOne} one-sided</span>` : ""}
+        ${nTwo > 0 ? `<span style="padding:3px 9px;background:#ede9fe;border-radius:6px;color:#5b21b6;font-size:0.82em">🔗 ${nTwo} two-flank</span>` : ""}
+        ${nOne > 0 ? `<span style="padding:3px 9px;background:#f0fdf4;border-radius:6px;color:#166534;font-size:0.82em">🔀 ${nOne} one-flank</span>` : ""}
       </div>`;
     card.appendChild(hdr);
 
@@ -494,9 +494,9 @@ html`${(() => {
     const body = document.createElement('div');
     body.className = 'card-body';
 
-    // ── Function tally — only functions corroborated on both sides ────────
-    // A function qualifies if it appears in ≥1 upMatch hit AND ≥1 dnMatch hit
-    // (two-sided hits count for both sides)
+    // ── Function tally for the central candidate gene (two-flank supported) ─
+    // A function qualifies if it appears in >=1 upstream-supported hit AND
+    // >=1 downstream-supported hit (two-sided hits count for both).
     const upFns = new Set(rows.filter(r => r.upMatch).map(r => r.genefunction?.trim() || "Hypothetical protein"));
     const dnFns = new Set(rows.filter(r => r.dnMatch).map(r => r.genefunction?.trim() || "Hypothetical protein"));
     const bothFns = new Set([...upFns].filter(fn => dnFns.has(fn)));
@@ -525,7 +525,7 @@ html`${(() => {
       const tallyDiv = document.createElement('div');
       tallyDiv.style.cssText = "margin-bottom:10px";
       tallyDiv.innerHTML = `
-        <div style="font-size:0.82em;color:#64748b;margin-bottom:4px">Functions corroborated on both sides (n=${tallyTotal} hits)</div>
+        <div style="font-size:0.82em;color:#64748b;margin-bottom:4px">Central-gene functions with support from both flanks (n=${tallyTotal} hits)</div>
         <table class="syn-tbl">
           <thead>
             <tr style="border-bottom:2px solid #cbd5e1;color:#64748b">
@@ -538,12 +538,12 @@ html`${(() => {
       body.appendChild(tallyDiv);
     }
 
-    // ── One-sided context (three-column view) ─────────────────────────────
+    // ── One-flank-supported central-gene functions (three-column view) ─────
     const upOnly = rows.filter(r => r.upMatch && !r.twoSided);
     const dnOnly = rows.filter(r => r.dnMatch && !r.twoSided);
     if (upOnly.length > 0 || dnOnly.length > 0) {
       const upN = upOnly.length, dnN = dnOnly.length;
-      // Collect all functions seen in either side, with per-side counts
+      // Collect central-gene functions by support type, with per-side counts
       const oneFns = new Map(); // fn → { up: n, dn: n }
       for (const r of upOnly) {
         const fn = r.genefunction?.trim() || "Hypothetical protein";
@@ -555,7 +555,7 @@ html`${(() => {
         if (!oneFns.has(fn)) oneFns.set(fn, { up: 0, dn: 0 });
         oneFns.get(fn).dn++;
       }
-      // Sort: functions seen on both sides first, then by total count
+      // Sort: functions seen in both one-flank subsets first, then by total
       const sortedOne = [...oneFns.entries()].sort(([, a], [, b]) => {
         const aShared = a.up > 0 && a.dn > 0 ? 1 : 0;
         const bShared = b.up > 0 && b.dn > 0 ? 1 : 0;
@@ -577,18 +577,18 @@ html`${(() => {
       const oneSidedToggle = document.createElement('button');
       oneSidedToggle.className = 'tbtn';
       oneSidedToggle.style.cssText += ";margin-bottom:8px";
-      oneSidedToggle.textContent = `▸ Show one-sided context (${upN + dnN} hit${upN + dnN !== 1 ? "s" : ""})`;
+      oneSidedToggle.textContent = `▸ Show one-flank-supported functions (${upN + dnN} hit${upN + dnN !== 1 ? "s" : ""})`;
 
       const oneSidedWrap = document.createElement('div');
       oneSidedWrap.style.cssText = "display:none;margin-bottom:10px";
       oneSidedWrap.innerHTML = `
-        <div style="font-size:0.82em;color:#64748b;margin-bottom:4px">One-sided context <span style="color:#94a3b8">(✓ = function appears on both sides)</span></div>
+        <div style="font-size:0.82em;color:#64748b;margin-bottom:4px">Central-gene functions from one-flank hits <span style="color:#94a3b8">(✓ = seen in both one-flank subsets: upstream-supported and downstream-supported)</span></div>
         <table class="syn-tbl">
           <thead>
             <tr style="border-bottom:2px solid #cbd5e1;color:#64748b">
               <th>Function</th>
-              <th style="text-align:right">↑ Upstream only (n=${upN})</th>
-              <th style="text-align:right">↓ Downstream only (n=${dnN})</th>
+              <th style="text-align:right">↑ Upstream flank matched only (n=${upN})</th>
+              <th style="text-align:right">↓ Downstream flank matched only (n=${dnN})</th>
             </tr>
           </thead>
           <tbody style="color:#334155">${fnRows}</tbody>
@@ -598,8 +598,8 @@ html`${(() => {
         const open = oneSidedWrap.style.display === 'none';
         oneSidedWrap.style.display = open ? '' : 'none';
         oneSidedToggle.textContent = open
-          ? `▾ Hide one-sided context (${upN + dnN} hit${upN + dnN !== 1 ? "s" : ""})`
-          : `▸ Show one-sided context (${upN + dnN} hit${upN + dnN !== 1 ? "s" : ""})`;
+          ? `▾ Hide one-flank-supported functions (${upN + dnN} hit${upN + dnN !== 1 ? "s" : ""})`
+          : `▸ Show one-flank-supported functions (${upN + dnN} hit${upN + dnN !== 1 ? "s" : ""})`;
       });
 
       // one-sided section appended after two-sided table (below)
