@@ -83,6 +83,7 @@ CREATE TABLE IF NOT EXISTS phages (
     subcluster          TEXT,
     cluster_subcluster  TEXT,
     genome_length       INTEGER,
+    is_draft            INTEGER NOT NULL DEFAULT 0,
     scraped_at          TEXT,
     PRIMARY KEY (phage_id, dataset)
 );
@@ -105,6 +106,7 @@ CREATE TABLE IF NOT EXISTS genes (
     locus_tag       TEXT,
     domain_count    INTEGER,
     tm_domain_count INTEGER,
+    is_draft        INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (gene_id, dataset)
 );
 
@@ -114,6 +116,7 @@ CREATE INDEX IF NOT EXISTS idx_genes_pham     ON genes (pham_name);
 CREATE TABLE IF NOT EXISTS scrape_log (
     phage_id     TEXT NOT NULL,
     dataset      TEXT NOT NULL,
+    is_draft     INTEGER NOT NULL DEFAULT 0,
     status       TEXT NOT NULL DEFAULT 'pending',
     attempts     INTEGER NOT NULL DEFAULT 0,
     last_attempt TEXT,
@@ -121,6 +124,13 @@ CREATE TABLE IF NOT EXISTS scrape_log (
     PRIMARY KEY (phage_id, dataset)
 );
 """
+
+
+def strip_draft(name: str) -> tuple[str, int]:
+    """Return (clean_name, is_draft) stripping a trailing '_Draft' suffix."""
+    if name.lower().endswith("_draft"):
+        return name[: -len("_draft")], 1
+    return name, 0
 
 
 def open_db(path: str) -> sqlite3.Connection:
@@ -188,39 +198,46 @@ def fetch_with_retry(
 # ---------------------------------------------------------------------------
 
 def upsert_phage(conn: sqlite3.Connection, dataset: str, genome: dict) -> None:
+    raw_name = genome.get("phagename", "")
+    clean_name, is_draft = strip_draft(raw_name)
     conn.execute(
         """
         INSERT INTO phages
             (phage_id, dataset, phagename, cluster, subcluster,
-             cluster_subcluster, genome_length, scraped_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+             cluster_subcluster, genome_length, is_draft, scraped_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (phage_id, dataset) DO UPDATE SET
             phagename          = excluded.phagename,
             cluster            = excluded.cluster,
             subcluster         = excluded.subcluster,
             cluster_subcluster = excluded.cluster_subcluster,
             genome_length      = excluded.genome_length,
+            is_draft           = excluded.is_draft,
             scraped_at         = excluded.scraped_at
         """,
         (
-            genome.get("phagename", ""),
+            clean_name,
             dataset,
-            genome.get("phagename", ""),
+            clean_name,
             genome.get("cluster", ""),
             genome.get("subcluster", ""),
             genome.get("clusterSubcluster", ""),
             genome.get("genomelength"),
+            is_draft,
             datetime.now(timezone.utc).isoformat(),
         ),
     )
 
 
-def upsert_genes(conn: sqlite3.Connection, dataset: str, genes: list) -> int:
+def upsert_genes(conn: sqlite3.Connection, dataset: str, genes: list, is_draft: int) -> int:
     rows = []
     for g in genes:
+        # The API's phageID field omits '_Draft'; strip_draft is a no-op here
+        # but keeps things consistent if the API ever changes.
+        phage_id, _ = strip_draft(g.get("phageID", ""))
         rows.append((
             g.get("geneID", ""),
-            g.get("phageID", ""),
+            phage_id,
             dataset,
             g.get("name", ""),
             g.get("accession", ""),
@@ -236,6 +253,7 @@ def upsert_genes(conn: sqlite3.Connection, dataset: str, genes: list) -> int:
             g.get("LocusTag", ""),
             g.get("domainCount"),
             g.get("tmDomainCount"),
+            is_draft,
         ))
 
     conn.executemany(
@@ -243,8 +261,8 @@ def upsert_genes(conn: sqlite3.Connection, dataset: str, genes: list) -> int:
         INSERT INTO genes
             (gene_id, phage_id, dataset, name, accession, start, stop,
              midpoint, gap, direction, pham_color, pham_name, translation,
-             gene_function, locus_tag, domain_count, tm_domain_count)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             gene_function, locus_tag, domain_count, tm_domain_count, is_draft)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT (gene_id, dataset) DO UPDATE SET
             name            = excluded.name,
             accession       = excluded.accession,
@@ -259,7 +277,8 @@ def upsert_genes(conn: sqlite3.Connection, dataset: str, genes: list) -> int:
             gene_function   = excluded.gene_function,
             locus_tag       = excluded.locus_tag,
             domain_count    = excluded.domain_count,
-            tm_domain_count = excluded.tm_domain_count
+            tm_domain_count = excluded.tm_domain_count,
+            is_draft        = excluded.is_draft
         """,
         rows,
     )
@@ -296,8 +315,11 @@ def set_scrape_status(
 
 def get_all_phage_names(
     dataset: str, headers: dict, max_retries: int, retry_wait: float
-) -> list[str]:
-    """Fetch the lightweight /genomes list and return all phage names."""
+) -> list[tuple[str, int]]:
+    """
+    Fetch the lightweight /genomes list.
+    Returns a list of (clean_phage_id, is_draft) tuples with '_Draft' stripped.
+    """
     url = f"{BASE_URL}/{dataset}/genomes"
     print(f"Fetching genome list from {url} ...")
     data = fetch_with_retry(url, headers, max_retries, retry_wait, label="genomes")
@@ -306,13 +328,17 @@ def get_all_phage_names(
     if not isinstance(data, list):
         sys.exit(f"ERROR: Expected a list from /genomes, got: {type(data)}")
 
-    names = [g["phagename"] for g in data if g.get("phagename")]
-    print(f"Found {len(names)} phages in dataset '{dataset}'.")
-    return names
+    phages = [
+        strip_draft(g["phagename"])
+        for g in data
+        if g.get("phagename")
+    ]
+    print(f"Found {len(phages)} phages in dataset '{dataset}'.")
+    return phages
 
 
 def seed_scrape_log(
-    conn: sqlite3.Connection, dataset: str, phage_names: list[str]
+    conn: sqlite3.Connection, dataset: str, phages: list[tuple[str, int]]
 ) -> None:
     """
     Insert 'pending' rows for any phage not yet in scrape_log.
@@ -320,21 +346,23 @@ def seed_scrape_log(
     """
     conn.executemany(
         """
-        INSERT OR IGNORE INTO scrape_log (phage_id, dataset, status, attempts)
-        VALUES (?, ?, 'pending', 0)
+        INSERT OR IGNORE INTO scrape_log (phage_id, dataset, is_draft, status, attempts)
+        VALUES (?, ?, ?, 'pending', 0)
         """,
-        [(name, dataset) for name in phage_names],
+        [(name, dataset, is_draft) for name, is_draft in phages],
     )
     conn.commit()
 
 
-def pending_phages(conn: sqlite3.Connection, dataset: str) -> list[str]:
+def pending_phages(conn: sqlite3.Connection, dataset: str) -> list[tuple[str, int]]:
+    """Return (phage_id, is_draft) for all phages not yet successfully scraped."""
     rows = conn.execute(
-        "SELECT phage_id FROM scrape_log WHERE dataset = ? AND status != 'success' "
-        "ORDER BY phage_id",
+        "SELECT phage_id, is_draft FROM scrape_log"
+        " WHERE dataset = ? AND status != 'success'"
+        " ORDER BY phage_id",
         (dataset,),
     ).fetchall()
-    return [r["phage_id"] for r in rows]
+    return [(r["phage_id"], r["is_draft"]) for r in rows]
 
 
 def scrape_dataset(
@@ -346,11 +374,11 @@ def scrape_dataset(
     max_retries: int,
 ) -> None:
     # --- Step 1: get phage list and seed the log ---
-    phage_names = get_all_phage_names(dataset, headers, max_retries, retry_wait)
-    seed_scrape_log(conn, dataset, phage_names)
+    phages = get_all_phage_names(dataset, headers, max_retries, retry_wait)
+    seed_scrape_log(conn, dataset, phages)
 
     todo = pending_phages(conn, dataset)
-    total = len(phage_names)
+    total = len(phages)
     already_done = total - len(todo)
 
     if already_done:
@@ -363,9 +391,12 @@ def scrape_dataset(
     succeeded = 0
     failed = 0
 
-    for i, phage_id in enumerate(todo, start=1):
+    for i, (phage_id, is_draft) in enumerate(todo, start=1):
         pct = (already_done + i) / total * 100
         print(f"[{already_done + i}/{total}  {pct:.1f}%]  {phage_id}")
+
+        # Reconstruct the API name — the endpoint uses the original name with _Draft.
+        api_name = phage_id + "_Draft" if is_draft else phage_id
 
         # Look up current attempt count
         row = conn.execute(
@@ -374,7 +405,7 @@ def scrape_dataset(
         ).fetchone()
         attempts_so_far = row["attempts"] if row else 0
 
-        url = f"{BASE_URL}/{dataset}/genome/{phage_id}"
+        url = f"{BASE_URL}/{dataset}/genome/{api_name}"
         genome = fetch_with_retry(
             url, headers, max_retries, retry_wait, label=phage_id
         )
@@ -389,7 +420,7 @@ def scrape_dataset(
         else:
             genes = genome.get("genes", [])
             upsert_phage(conn, dataset, genome)
-            n_genes = upsert_genes(conn, dataset, genes)
+            n_genes = upsert_genes(conn, dataset, genes, is_draft)
             conn.commit()
             succeeded += 1
             set_scrape_status(
