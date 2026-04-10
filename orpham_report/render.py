@@ -356,6 +356,7 @@ def _hit_rows(rows: list[dict], show_flank: bool = False) -> tuple[str, int]:
             f'<td style="white-space:nowrap">'
             f'<a href="{phage_url}" target="_blank" title="{escape(pham_title)}">'
             f'{escape(tag)}</a>{escape(draft_flag)}</td>'
+            f'<td class="fn-dim">{_pham_link(r["candidate_pham"])}</td>'
             f"<td>{escape(fn_display(r['gene_function']))}</td>"
             f"</tr>"
         )
@@ -376,7 +377,7 @@ def _render_hits_table(hits: list[dict]) -> str:
     if two_sided:
         tbody, hidden = _hit_rows(two_sided)
         hidden_note = (
-            f'<tr><td colspan="3" class="hidden-note">'
+            f'<tr><td colspan="4" class="hidden-note">'
             f'+ {hidden} NKF/hypothetical hit{"s" if hidden != 1 else ""} not shown'
             f'</td></tr>' if hidden else ""
         )
@@ -384,7 +385,7 @@ def _render_hits_table(hits: list[dict]) -> str:
             f'<div class="hits-group">'
             f'<div class="hits-group-label two-label">↑↓ two-flank ({len(two_sided)})</div>'
             f'<table class="hits-table"><thead><tr>'
-            f'<th>Subcluster</th><th>Gene</th><th>Function</th>'
+            f'<th>Subcluster</th><th>Gene</th><th>Pham</th><th>Function</th>'
             f'</tr></thead><tbody>{tbody}{hidden_note}</tbody></table>'
             f'</div>'
         )
@@ -396,13 +397,13 @@ def _render_hits_table(hits: list[dict]) -> str:
         tbody  = up_body + dn_body
         hidden = up_hidden + dn_hidden
         hidden_note = (
-            f'<tr><td colspan="4" class="hidden-note">'
+            f'<tr><td colspan="5" class="hidden-note">'
             f'+ {hidden} NKF/hypothetical hit{"s" if hidden != 1 else ""} not shown'
             f'</td></tr>' if hidden else ""
         )
         inner = (
             f'<table class="hits-table"><thead><tr>'
-            f'<th>Flank</th><th>Subcluster</th><th>Gene</th><th>Function</th>'
+            f'<th>Flank</th><th>Subcluster</th><th>Gene</th><th>Pham</th><th>Function</th>'
             f'</tr></thead><tbody>{tbody}{hidden_note}</tbody></table>'
             if tbody or hidden_note else
             '<p class="no-hits" style="margin:4px 0">All one-flank hits are NKF/hypothetical.</p>'
