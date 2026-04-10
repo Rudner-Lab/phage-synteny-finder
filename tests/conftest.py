@@ -135,7 +135,7 @@ def db():
     conn.close()
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def real_db():
     """Connection to the actual phamerator.sqlite (skipped if file absent)."""
     import os

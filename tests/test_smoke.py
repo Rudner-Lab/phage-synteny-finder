@@ -21,23 +21,25 @@ REAL_DATASET = "Actino_Draft"
 
 
 class TestRealDbAnalysis:
-    def test_lordvader_counts(self, real_db):
+    def test_rrh1_counts(self, real_db):
+        # RRH1: small phage (20 genes) with passing orphams — fast smoke check
         from orpham_report.analysis import compute_phage_results
-        passing, summary = compute_phage_results(real_db, "LordVader", REAL_DATASET)
-        assert summary["total_genes"] == 102
-        assert summary["total_orphams"] == 24
+        passing, summary = compute_phage_results(real_db, "RRH1", REAL_DATASET)
+        assert summary["total_genes"] == 20
+        assert summary["total_orphams"] == 7
         assert summary["with_informative"] == 3
 
-    def test_beanstalk_no_passing(self, real_db):
+    def test_thatch_no_passing(self, real_db):
+        # Thatch: small phage (19 genes) with orphams but none informative
         from orpham_report.analysis import compute_phage_results
-        passing, summary = compute_phage_results(real_db, "Beanstalk", REAL_DATASET)
-        assert summary["total_genes"] == 100
-        assert summary["total_orphams"] == 5
+        passing, summary = compute_phage_results(real_db, "Thatch", REAL_DATASET)
+        assert summary["total_genes"] == 19
+        assert summary["total_orphams"] == 2
         assert summary["with_informative"] == 0
 
     def test_result_fields_present(self, real_db):
         from orpham_report.analysis import compute_phage_results
-        passing, _ = compute_phage_results(real_db, "LordVader", REAL_DATASET)
+        passing, _ = compute_phage_results(real_db, "RRH1", REAL_DATASET)
         required = {
             "gene_number", "pham_name", "direction", "gene_function",
             "gene_length", "start", "stop",
