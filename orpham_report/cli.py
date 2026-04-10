@@ -90,7 +90,7 @@ def _run_single_phage(conn, args) -> None:
         )
 
     out_path = Path(
-        args.out or f"{phage_id}_orpham_report.html"
+        args.out or f"output/{phage_id}_orpham_report.html"
     ).expanduser().resolve()
 
     print(f"Dataset : {args.dataset}")
@@ -124,7 +124,7 @@ def _run_cluster(conn, args) -> None:
     patterns = args.cluster
     out_stem = "_".join(patterns).replace("*", "x").replace(" ", "_")
     out_path = Path(
-        args.out or f"{out_stem}_orpham_report.html"
+        args.out or f"output/{out_stem}_orpham_report.html"
     ).expanduser().resolve()
 
     phage_rows = resolve_cluster_phages(conn, patterns, args.dataset)
