@@ -746,7 +746,12 @@ def render_html(
     """
     generated = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     pattern_str = ", ".join(patterns)
-    title_str = f"Cluster {pattern_str}" if pattern_str.lower() != "all" else "All Clusters"
+    if len(phage_results) == 1 and phage_results[0][0] == pattern_str:
+        title_str = f"Phage {pattern_str}"
+    elif pattern_str.lower() == "all":
+        title_str = "All Clusters"
+    else:
+        title_str = f"Cluster {pattern_str}"
 
     # Group by cluster (preserving order)
     cluster_data: dict[str, list] = {}
