@@ -65,7 +65,11 @@ h3.section-title { font-size: 0.95em; color: #475569; margin: 24px 0 8px; font-w
 .summary-table { margin-bottom: 28px; }
 
 /* ── Cluster sections ── */
-.cluster-section { margin-bottom: 12px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; }
+.cluster-section {
+  margin-bottom: 12px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 400px;
+}
 .cluster-heading {
   font-size: 1.05em; font-weight: 700; color: #1e293b;
   padding: 8px 14px; background: #f1f5f9;
