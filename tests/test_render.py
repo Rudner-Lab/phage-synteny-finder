@@ -31,7 +31,7 @@ class TestEscape:
 def _build_results(db, patterns):
     phage_rows = resolve_cluster_phages(db, patterns, DATASET)
     results = []
-    for phage_id, cluster, cs in phage_rows:
+    for phage_id, cluster, cs, _is_draft in phage_rows:
         orpham_results, summary = compute_phage_results(db, phage_id, DATASET)
         results.append((phage_id, cluster, cs, orpham_results, summary))
     return results

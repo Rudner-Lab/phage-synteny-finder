@@ -104,17 +104,19 @@ def _run_single_phage(conn, args) -> None:
 
     # resolve_phage_id gives us the canonical phage_id; look up cluster info
     row = conn.execute(
-        "SELECT cluster, cluster_subcluster FROM phages WHERE phage_id = ? AND dataset = ?",
+        "SELECT cluster, cluster_subcluster, is_draft FROM phages WHERE phage_id = ? AND dataset = ?",
         (phage_id, args.dataset),
     ).fetchone()
-    cluster = row["cluster"] if row else ""
-    cs      = row["cluster_subcluster"] if row else ""
+    cluster  = row["cluster"] if row else ""
+    cs       = row["cluster_subcluster"] if row else ""
+    is_draft = bool(row["is_draft"]) if row else False
 
     print()
     html = render_html(
         [(phage_id, cluster, cs, orpham_results, summary)],
         args.dataset,
         [phage_id],
+        phage_is_draft={phage_id: is_draft},
     )
     out_path.write_text(html, encoding="utf-8")
     print(f"Report written to: {out_path}")
@@ -141,7 +143,8 @@ def _run_cluster(conn, args) -> None:
     print(f"Output   : {out_path}")
     print()
 
-    phage_meta = {pid: (cl, cs) for pid, cl, cs in phage_rows}
+    phage_meta     = {pid: (cl, cs) for pid, cl, cs, _ in phage_rows}
+    phage_is_draft = {pid: draft   for pid, _, _, draft in phage_rows}
     phage_results: list[tuple[str, str, str, list, dict]] = []
     total = len(phage_rows)
     done  = [0]
@@ -158,12 +161,12 @@ def _run_cluster(conn, args) -> None:
 
     compute_cluster_results(
         conn,
-        [pid for pid, _, _ in phage_rows],
+        [pid for pid, _, _, _ in phage_rows],
         args.dataset,
         on_phage_done=_on_done,
     )
 
     print()
-    html = render_html(phage_results, args.dataset, patterns)
+    html = render_html(phage_results, args.dataset, patterns, phage_is_draft=phage_is_draft)
     out_path.write_text(html, encoding="utf-8")
     print(f"Report written to: {out_path}")

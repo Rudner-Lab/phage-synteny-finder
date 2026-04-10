@@ -39,8 +39,8 @@ def resolve_cluster_phages(
     conn: sqlite3.Connection,
     patterns: list[str],
     dataset: str,
-) -> list[tuple[str, str, str]]:
-    """Return (phage_id, cluster, cluster_subcluster) rows matching *patterns*.
+) -> list[tuple[str, str, str, bool]]:
+    """Return (phage_id, cluster, cluster_subcluster, is_draft) rows matching *patterns*.
 
     Pattern rules:
       - "all"  → every phage in the dataset
@@ -53,13 +53,13 @@ def resolve_cluster_phages(
     if any(p.lower() == "all" for p in patterns):
         rows = conn.execute(
             """
-            SELECT phage_id, cluster, cluster_subcluster
+            SELECT phage_id, cluster, cluster_subcluster, is_draft
             FROM phages WHERE dataset = ?
             ORDER BY cluster, cluster_subcluster, phage_id
             """,
             (dataset,),
         ).fetchall()
-        return [(r["phage_id"], r["cluster"], r["cluster_subcluster"]) for r in rows]
+        return [(r["phage_id"], r["cluster"], r["cluster_subcluster"], bool(r["is_draft"])) for r in rows]
 
     # Split patterns into wildcards ("F*") and exact matches ("F" or "F1")
     wildcard_clusters = [p[:-1].lower() for p in patterns if p.endswith("*")]
@@ -85,7 +85,7 @@ def resolve_cluster_phages(
 
     rows = conn.execute(
         f"""
-        SELECT phage_id, cluster, cluster_subcluster
+        SELECT phage_id, cluster, cluster_subcluster, is_draft
         FROM phages WHERE dataset = ?
         AND ({" OR ".join(clauses)})
         ORDER BY cluster, cluster_subcluster, phage_id
@@ -93,4 +93,4 @@ def resolve_cluster_phages(
         params,
     ).fetchall()
 
-    return [(r["phage_id"], r["cluster"], r["cluster_subcluster"]) for r in rows]
+    return [(r["phage_id"], r["cluster"], r["cluster_subcluster"], bool(r["is_draft"])) for r in rows]

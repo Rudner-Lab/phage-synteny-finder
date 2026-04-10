@@ -151,6 +151,7 @@ details[open] > .phage-summary { border-radius: 8px 8px 0 0; }
 .card-header::marker { display: none; }
 .gene-title { font-weight: 700; color: #1e293b; }
 .gene-pos   { color: #64748b; margin-left: 8px; font-size: 0.9em; }
+.assigned-function   { color: #713f12; margin-left: 8px; font-size: 0.9em; }
 .gene-fn    { color: #475569; margin-left: 8px; font-style: italic; }
 .gene-pham  { font-size: 0.8em; color: #94a3b8; margin-left: 8px; }
 .dir-fwd    { color: #2563eb; font-weight: 700; margin-left: 4px; }
@@ -233,6 +234,11 @@ tr:last-child td { border-bottom: none; }
 a { color: #2563eb; text-decoration: none; }
 a:hover { text-decoration: underline; }
 .draft-flag { font-size: 0.75em; color: #64748b; }
+
+/* ── Sortable tables ── */
+th { cursor: pointer; user-select: none; }
+th[data-sort="asc"]::after  { content: ' ▲'; font-size: 0.75em; opacity: 0.7; }
+th[data-sort="desc"]::after { content: ' ▼'; font-size: 0.75em; opacity: 0.7; }
 
 /* ── Print ── */
 @media print {
@@ -440,8 +446,6 @@ def _render_hits_table(hits: list[dict]) -> str:
 def _render_orpham_card(o: dict, phage_id: str) -> str:
     n2, n1    = o["n_two_sided"], o["n_one_sided"]
     direction = o["direction"]
-    gene_fn   = escape(fn_display(o["gene_function"])) if o["gene_function"] else ""
-
     start = str(o["start"]).replace("None", "?")
     stop  = str(o["stop"]).replace("None", "?")
 
@@ -464,20 +468,23 @@ def _render_orpham_card(o: dict, phage_id: str) -> str:
         '<span class="flank-badge fn-dim">↓ —</span>'
     )
     count_badges = (
-        (f'<span class="badge badge-two">🔗 {n2} two-flank</span>' if n2 > 0 else "") +
-        (f'<span class="badge badge-one">🔀 {n1} one-flank</span>' if n1 > 0 else "")
+        (f'<span class="badge badge-two">{n2} two-flank</span>' if n2 > 0 else "") +
+        (f'<span class="badge badge-one">{n1} one-flank</span>' if n1 > 0 else "")
     )
 
-    gene_fn_span = f'<span class="gene-fn">{gene_fn}</span>' if gene_fn else ""
+    assigned_fn_badge = (
+        f'<span class="assigned-function">{escape(fn_display(o["gene_function"]))}</span>'
+        if is_informative(o["gene_function"]) else ""
+    )
     anchor = _orpham_anchor(phage_id, o["gene_number"])
 
     summary_el = (
         f'<summary class="card-header">'
         f'<div>'
         f'<span class="gene-title" id="{anchor}">Gene {escape(o["gene_number"])}</span>'
+        f'{assigned_fn_badge}'
         f'<span class="gene-pos">{escape(start)}–{escape(stop)} bp</span>'
         f'{_dir_tag(direction)}'
-        f'{gene_fn_span}'
         f'{pham_span}'
         f'</div>'
         f'<div class="badges">{up_badge}{dn_badge}{count_badges}</div>'
@@ -508,7 +515,12 @@ def _top_fn(o: dict) -> str:
     return ""
 
 
-def _results_table(rows: list[tuple[str, str, dict]], title: str, title_cls: str) -> str:
+def _results_table(
+    rows: list[tuple[str, str, dict]],
+    title: str,
+    title_cls: str,
+    phage_is_draft: dict[str, bool],
+) -> str:
     """Render one results sub-table (two-flank or one-flank section).
 
     Each row is (phage_id, subcluster, orpham_result_dict).
@@ -518,23 +530,32 @@ def _results_table(rows: list[tuple[str, str, dict]], title: str, title_cls: str
         "<th>Subcluster</th>"
         "<th>Phage</th>"
         "<th>Gene (position)</th>"
-        "<th>Top function</th>"
+        "<th>Assigned function</th>"
+        "<th>Synteny-suggested function</th>"
         "</tr></thead>"
     )
     tbody = ""
     for phage_id, subcluster, o in rows:
-        anchor = _orpham_anchor(phage_id, o["gene_number"])
-        start  = o["start"] if o["start"] is not None else "?"
-        stop   = o["stop"]  if o["stop"]  is not None else "?"
-        fn     = _top_fn(o)
-        fn_cell = f'<td>{escape(fn)}</td>' if fn else '<td class="fn-dim">—</td>'
+        anchor      = _orpham_anchor(phage_id, o["gene_number"])
+        start       = o["start"] if o["start"] is not None else "?"
+        stop        = o["stop"]  if o["stop"]  is not None else "?"
+        draft_em    = " 🚧" if phage_is_draft.get(phage_id, False) else ""
+        assigned    = o.get("gene_function", "")
+        assigned_cell = (
+            f'<td>{escape(fn_display(assigned))}</td>'
+            if is_informative(assigned)
+            else '<td class="fn-dim">—</td>'
+        )
+        top_fn      = _top_fn(o)
+        top_fn_cell = f'<td>{escape(top_fn)}</td>' if top_fn else '<td class="fn-dim">—</td>'
         tbody += (
             f"<tr>"
             f'<td class="fn-dim" style="white-space:nowrap">{escape(subcluster)}</td>'
-            f'<td><a href="#{_phage_anchor(phage_id)}">{escape(phage_id)}</a></td>'
+            f'<td><a href="#{_phage_anchor(phage_id)}">{escape(phage_id)}</a>{draft_em}</td>'
             f'<td><a href="#card-{anchor}">{escape(o["gene_number"])}</a>'
             f' <span class="fn-dim">({escape(str(start))}–{escape(str(stop))} bp)</span></td>'
-            f"{fn_cell}"
+            f"{assigned_cell}"
+            f"{top_fn_cell}"
             f"</tr>"
         )
     return (
@@ -544,7 +565,8 @@ def _results_table(rows: list[tuple[str, str, dict]], title: str, title_cls: str
 
 
 def _render_global_results_table(
-    cluster_data: dict[str, list[tuple[str, str, list[dict], dict]]]
+    cluster_data: dict[str, list[tuple[str, str, list[dict], dict]]],
+    phage_is_draft: dict[str, bool],
 ) -> str:
     all_rows: list[tuple[str, str, dict]] = [
         (phage_id, cs or cluster, o)
@@ -561,9 +583,9 @@ def _render_global_results_table(
 
     out = ""
     if two_rows:
-        out += _results_table(two_rows, "↑↓ Two-flank evidence", "two-label")
+        out += _results_table(two_rows, "↑↓ Two-flank evidence", "two-label", phage_is_draft)
     if one_rows:
-        out += _results_table(one_rows, "↑ or ↓ One-flank evidence only", "one-label")
+        out += _results_table(one_rows, "↑ or ↓ One-flank evidence only", "one-label", phage_is_draft)
     return out
 
 
@@ -578,7 +600,7 @@ def _phage_mini_stats(summary: dict, n_shown: int) -> str:
         f'<span class="phage-stat phage-stat-orange">{summary["total_orphams"]} orphams</span>'
     )
     if n_shown:
-        stats += f'<span class="phage-stat phage-stat-green">→ {n_shown} shown</span>'
+        stats += f'<span class="phage-stat phage-stat-green">{n_shown} insight{"s" if n_shown != 1 else ""}</span>'
     return f'<span class="phage-stats">{stats}</span>'
 
 
@@ -742,6 +764,7 @@ def render_html(
     phage_results: list[tuple[str, str, str, list[dict], dict]],
     dataset: str,
     patterns: list[str],
+    phage_is_draft: dict[str, bool] | None = None,
 ) -> str:
     """Render the full HTML report.
 
@@ -764,8 +787,9 @@ def render_html(
     for phage_id, cluster, cs, orpham_results, summary in phage_results:
         cluster_data.setdefault(cluster, []).append((phage_id, cs, orpham_results, summary))
 
+    _is_draft = phage_is_draft or {}
     overall_html       = _render_overall_summary(cluster_data)
-    results_table_html = _render_global_results_table(cluster_data)
+    results_table_html = _render_global_results_table(cluster_data, _is_draft)
     toc_html           = _render_toc(cluster_data)
     body_html          = "\n".join(
         _render_cluster_section(cluster, entries)
@@ -827,6 +851,34 @@ def render_html(
         "    var gene = target.querySelector('details');\n"
         "    if (gene) gene.open = true;\n"
         "  }\n"
+        "});\n"
+        "// Sortable tables\n"
+        "document.querySelectorAll('table').forEach(function(tbl) {\n"
+        "  tbl.querySelectorAll('th').forEach(function(th, colIdx) {\n"
+        "    th.title = 'Click to sort';\n"
+        "    var dir = 0;\n"
+        "    th.addEventListener('click', function() {\n"
+        "      var asc = dir !== 1;\n"
+        "      tbl.querySelectorAll('th').forEach(function(h) {\n"
+        "        h._sortDir = 0; h.removeAttribute('data-sort');\n"
+        "      });\n"
+        "      dir = asc ? 1 : -1;\n"
+        "      th.setAttribute('data-sort', asc ? 'asc' : 'desc');\n"
+        "      var tbody = tbl.querySelector('tbody');\n"
+        "      if (!tbody) return;\n"
+        "      var rows = Array.from(tbody.querySelectorAll('tr'));\n"
+        "      rows.sort(function(a, b) {\n"
+        "        var aText = (a.cells[colIdx] ? a.cells[colIdx].textContent : '').trim();\n"
+        "        var bText = (b.cells[colIdx] ? b.cells[colIdx].textContent : '').trim();\n"
+        "        var aNum = parseFloat(aText), bNum = parseFloat(bText);\n"
+        "        var cmp = (!isNaN(aNum) && !isNaN(bNum))\n"
+        "          ? aNum - bNum\n"
+        "          : aText.localeCompare(bText, undefined, {numeric: true, sensitivity: 'base'});\n"
+        "        return asc ? cmp : -cmp;\n"
+        "      });\n"
+        "      rows.forEach(function(r) { tbody.appendChild(r); });\n"
+        "    });\n"
+        "  });\n"
         "});\n"
         "</script>\n"
         "</body>\n"

@@ -100,14 +100,14 @@ class TestResolveClusterPhages:
 
     def test_returns_cluster_info(self, db):
         rows = resolve_cluster_phages(db, ["A1"], DATASET)
-        for phage_id, cluster, cs in rows:
+        for phage_id, cluster, cs, is_draft in rows:
             assert cluster == "A"
             assert cs == "A1"
 
     def test_unsubclustered_cluster_info(self, db):
         rows = resolve_cluster_phages(db, ["A"], DATASET)
         assert len(rows) == 1
-        phage_id, cluster, cs = rows[0]
+        phage_id, cluster, cs, is_draft = rows[0]
         assert phage_id == "Zeta"
         assert cluster == "A"
         assert cs == ""
