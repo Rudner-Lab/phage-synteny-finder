@@ -48,8 +48,8 @@ h3.section-title { font-size: 0.95em; color: #475569; margin: 24px 0 8px; font-w
 .toc-cluster  { font-size: 0.88em; }
 .toc-cluster a { color: #2563eb; font-weight: 600; }
 .toc-cluster .toc-phages { margin-left: 12px; color: #64748b; font-size: 0.92em; }
-.toc-cluster .toc-phages a { color: #475569; font-weight: 400; }
 .toc-cluster .toc-phages a.has-results { color: #15803d; font-weight: 600; }
+.toc-phage-omitted { color: #cbd5e1; }
 
 /* ── Summary bar ── */
 .summary { display: flex; gap: 10px; flex-wrap: wrap; margin: 0 0 20px; }
@@ -168,6 +168,18 @@ details[open] > .phage-summary { border-radius: 8px 8px 0 0; }
 .hits-table td { padding: 3px 8px; }
 .no-hits { color: #94a3b8; font-style: italic; font-size: 0.88em; }
 .hidden-note { font-size: 0.8em; color: #94a3b8; font-style: italic; padding: 2px 8px; }
+
+/* ── Omitted phages footer ── */
+.omitted-details { margin-top: 8px; }
+.omitted-summary {
+  font-size: 0.78em; color: #94a3b8; cursor: pointer; list-style: none;
+  padding: 4px 2px;
+}
+.omitted-summary::-webkit-details-marker { display: none; }
+.omitted-summary::marker { display: none; }
+.omitted-body { font-size: 0.78em; color: #64748b; padding: 4px 2px 0; }
+.omitted-row { margin-bottom: 3px; }
+.omitted-label { font-weight: 600; color: #94a3b8; margin-right: 4px; }
 
 /* ── Section headings ── */
 .section-heading {
@@ -569,23 +581,66 @@ def _render_phage_section(phage_id: str, cs: str, orpham_results: list[dict], su
 # ---------------------------------------------------------------------------
 
 
+def _render_omitted_footer(
+    no_orphams: list[str], no_results: list[str]
+) -> str:
+    """Collapsed footer listing phages omitted from the evidence section."""
+    if not no_orphams and not no_results:
+        return ""
+    total = len(no_orphams) + len(no_results)
+    parts = []
+    if no_orphams:
+        parts.append(f"{len(no_orphams)} with no orphams")
+    if no_results:
+        parts.append(f"{len(no_results)} with orphams but no informative results")
+    summary_text = f"{total} phage{'s' if total != 1 else ''} omitted — {', '.join(parts)}"
+
+    body = ""
+    if no_orphams:
+        names = ", ".join(escape(p) for p in no_orphams)
+        body += (
+            f'<div class="omitted-row">'
+            f'<span class="omitted-label">No orphams:</span>{names}'
+            f'</div>'
+        )
+    if no_results:
+        names = ", ".join(escape(p) for p in no_results)
+        body += (
+            f'<div class="omitted-row">'
+            f'<span class="omitted-label">Orphams, no informative results:</span>{names}'
+            f'</div>'
+        )
+    return (
+        f'<details class="omitted-details">'
+        f'<summary class="omitted-summary">{escape(summary_text)}</summary>'
+        f'<div class="omitted-body">{body}</div>'
+        f'</details>'
+    )
+
+
 def _render_cluster_section(cluster: str, phage_entries: list[tuple[str, str, list[dict], dict]]) -> str:
+    shown      = [(pid, cs, r, s) for pid, cs, r, s in phage_entries if s["with_informative"] > 0]
+    no_orphams = [pid for pid, _, _, s in phage_entries if s["total_orphams"] == 0]
+    no_results = [pid for pid, _, _, s in phage_entries
+                  if s["total_orphams"] > 0 and s["with_informative"] == 0]
+
     n_phages = len(phage_entries)
-    n_with_results = sum(1 for _, _, results, _ in phage_entries if results)
+    n_shown  = len(shown)
     cs_badge = (
         f'<span class="cs-badge">{n_phages} phage{"s" if n_phages != 1 else ""}'
-        f'{f", {n_with_results} with results" if n_with_results else ""}</span>'
+        f'{f", {n_shown} with results" if n_shown else ""}</span>'
     )
     phage_sections = "\n".join(
         _render_phage_section(pid, cs, results, summary)
-        for pid, cs, results, summary in phage_entries
+        for pid, cs, results, summary in shown
     )
+    omitted = _render_omitted_footer(no_orphams, no_results)
     return (
         f'<details class="cluster-section" id="cluster-{escape(cluster)}" open>'
         f'<summary class="cluster-heading">'
         f'Cluster {escape(cluster or "Singletons")}{cs_badge}'
         f'</summary>'
-        f'<div class="cluster-content">{phage_sections}</div>'
+        f'<div class="cluster-content">{phage_sections}{omitted}</div>'
         f'</details>'
     )
 
@@ -601,9 +656,9 @@ def _render_toc(cluster_data: dict[str, list[tuple[str, str, list, dict]]]) -> s
         cluster_label = cluster or "Singletons"
         cluster_href = f"#cluster-{cluster_label}"
         phage_links = " · ".join(
-            f'<a href="#{_phage_anchor(pid)}"'
-            f'{" class=\"has-results\"" if results else ""}>'
-            f'{escape(pid)}</a>'
+            f'<a href="#{_phage_anchor(pid)}" class="has-results">{escape(pid)}</a>'
+            if results else
+            f'<span class="toc-phage-omitted">{escape(pid)}</span>'
             for pid, _, results, _ in phage_entries
         )
         items.append(
@@ -643,8 +698,8 @@ def _render_overall_summary(cluster_data: dict[str, list[tuple[str, str, list, d
         '<div class="summary">'
         + _stat("stat-slate",  "phages scanned",             total_phages)
         + _stat("stat-blue",   "phages with results",        phages_with)
-        + _stat("stat-orange", "orphams total",              total_orphams)
-        + _stat("stat-green",  "orphams shown (informative)", total_shown)
+        + _stat("stat-orange", "orphams analyzed",            total_orphams)
+        + _stat("stat-green",  "orphams with informative results", total_shown)
         + "</div>"
     )
 
@@ -716,10 +771,10 @@ def render_html(
         f"{_section_heading('Overview')}\n"
         f"{overall_html}\n"
         f"{intro}\n"
-        f"{_section_heading('Results at a Glance')}\n"
-        f"{results_table_html}\n"
         f"{_section_heading('Phage Index')}\n"
         f"{toc_html}\n"
+        f"{_section_heading('Results at a Glance')}\n"
+        f"{results_table_html}\n"
         f"{_section_heading('Evidence by Phage')}\n"
         f"{body_html}\n"
         "</body>\n"
