@@ -1,7 +1,9 @@
 """
 analysis.py — orpham identification, synteny scanning, and function tallying.
 
-Public entry point: ``compute_phage_results(conn, phage_id, dataset)``
+Public entry points:
+  compute_phage_results    – single-phage pipeline (kept for ad-hoc use)
+  compute_cluster_results  – batch pipeline; share DB work across many phages
 
 The pipeline for one phage is:
 
@@ -20,6 +22,7 @@ from __future__ import annotations
 
 import sqlite3
 from collections import defaultdict
+from collections.abc import Callable
 
 from .db import normalize_phage_id, sql_norm_phage
 
@@ -490,3 +493,119 @@ def compute_phage_results(
         "with_informative": len(passing),
     }
     return passing, summary
+
+
+# ---------------------------------------------------------------------------
+# Batch entry point (efficient for clusters with many phages)
+# ---------------------------------------------------------------------------
+
+
+def _bulk_load_phage_genes(
+    conn: sqlite3.Connection, phage_ids: list[str], dataset: str
+) -> dict[str, list[dict]]:
+    """Load genes for multiple phages in a single query."""
+    if not phage_ids:
+        return {}
+    placeholders = ",".join("?" * len(phage_ids))
+    result: dict[str, list[dict]] = {}
+    for row in conn.execute(
+        f"SELECT * FROM genes WHERE dataset = ? AND phage_id IN ({placeholders})"
+        " ORDER BY phage_id, stop, start, name",
+        [dataset] + phage_ids,
+    ).fetchall():
+        result.setdefault(row["phage_id"], []).append(dict(row))
+    return result
+
+
+def _make_summary(ref_genes: list[dict], all_results: list[dict], passing: list[dict]) -> dict:
+    return {
+        "total_genes": len(ref_genes),
+        "total_orphams": len(all_results),
+        "with_any_hits": sum(1 for r in all_results if r["hits"]),
+        "with_two_flank": sum(1 for r in all_results if r["n_two_sided"] > 0),
+        "with_informative": len(passing),
+    }
+
+
+def compute_cluster_results(
+    conn: sqlite3.Connection,
+    phage_ids: list[str],
+    dataset: str,
+    on_phage_done: Callable[[str, list[dict], dict], None] | None = None,
+) -> list[tuple[str, list[dict], dict]]:
+    """Run the orpham synteny pipeline for a batch of phages efficiently.
+
+    Versus N calls to compute_phage_results this reduces:
+      - Reference gene loading:  N queries  → 1
+      - Orpham pham check:       N queries  → 1
+      - Candidate data loading:  up to N×M  → at most M unique candidates total
+
+    Args:
+      on_phage_done  optional callback(phage_id, passing, summary) for progress reporting
+    Returns:
+      list of (phage_id, passing_results, summary) in input order
+    """
+    if not phage_ids:
+        return []
+
+    # 1. Bulk-load all reference genes in one query
+    all_ref_genes = _bulk_load_phage_genes(conn, phage_ids, dataset)
+
+    # 2. Single orpham pham check across all phams seen in any reference phage
+    all_phams = {
+        g["pham_name"]
+        for genes in all_ref_genes.values()
+        for g in genes
+        if g["pham_name"]
+    }
+    pham_is_orpham = bulk_check_orpham_phams(conn, all_phams, dataset)
+
+    # 3. Process each phage; candidate data accumulates in a shared cache
+    candidate_genes_cache: dict[str, list[dict]] = {}
+    candidate_meta_cache: dict[str, dict] = {}
+    output: list[tuple[str, list[dict], dict]] = []
+
+    for phage_id in phage_ids:
+        ref_norm  = normalize_phage_id(phage_id)
+        ref_genes = all_ref_genes.get(phage_id, [])
+
+        orpham_data = identify_orphams(ref_genes, pham_is_orpham)
+
+        all_neighbor_phams: set[str] = {
+            p for o in orpham_data
+            for p in (o["ref_up_pham"], o["ref_dn_pham"]) if p
+        }
+        candidate_ids = find_candidate_phages(conn, all_neighbor_phams, ref_norm, dataset)
+
+        new_ids = candidate_ids - set(candidate_genes_cache)
+        if new_ids:
+            new_genes, new_meta = load_candidate_data(conn, new_ids, dataset)
+            candidate_genes_cache.update(new_genes)
+            candidate_meta_cache.update(new_meta)
+
+        phage_genes = {pid: candidate_genes_cache[pid] for pid in candidate_ids
+                       if pid in candidate_genes_cache}
+        phage_meta  = {pid: candidate_meta_cache[pid]  for pid in candidate_ids
+                       if pid in candidate_meta_cache}
+
+        pham_index = build_pham_index(phage_genes)
+
+        all_results: list[dict] = []
+        for o in orpham_data:
+            hits = scan_orpham_hits(o, phage_genes, pham_index, phage_meta)
+            tally_sorted, tally_total, both_fns = compute_function_tallies(hits)
+            one_fns_sorted, up_only_count, dn_only_count = compute_one_flank_tallies(hits)
+            all_results.append(assemble_orpham_result(
+                o, hits, tally_sorted, tally_total, both_fns,
+                one_fns_sorted, up_only_count, dn_only_count,
+            ))
+
+        passing = [r for r in all_results if r["passes_filter"]]
+        summary = _make_summary(ref_genes, all_results, passing)
+
+        if on_phage_done:
+            on_phage_done(phage_id, passing, summary)
+
+        output.append((phage_id, passing, summary))
+
+    return output

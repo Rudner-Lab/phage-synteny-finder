@@ -24,7 +24,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from .analysis import compute_phage_results
+from .analysis import compute_cluster_results
 from .db import open_db, resolve_cluster_phages
 from .render import render_html
 
@@ -86,13 +86,27 @@ def main(argv: list[str] | None = None) -> None:
         print(f"Output   : {out_path}")
         print()
 
+        phage_meta = {pid: (cl, cs) for pid, cl, cs in phage_rows}
         phage_results: list[tuple[str, str, str, list, dict]] = []
-        for i, (phage_id, cluster, cs) in enumerate(phage_rows, 1):
-            print(f"  [{i}/{len(phage_rows)}] {phage_id} ({cs or cluster})", end="", flush=True)
-            orpham_results, summary = compute_phage_results(conn, phage_id, args.dataset)
-            phage_results.append((phage_id, cluster, cs, orpham_results, summary))
+        total = len(phage_rows)
+        done  = [0]
+
+        def _on_done(phage_id: str, orpham_results: list, summary: dict) -> None:
+            done[0] += 1
+            cl, cs = phage_meta[phage_id]
             n = summary["with_informative"]
-            print(f"  → {n} result{'s' if n != 1 else ''}")
+            print(
+                f"  [{done[0]}/{total}] {phage_id} ({cs or cl})"
+                f"  → {n} result{'s' if n != 1 else ''}"
+            )
+            phage_results.append((phage_id, cl, cs, orpham_results, summary))
+
+        compute_cluster_results(
+            conn,
+            [pid for pid, _, _ in phage_rows],
+            args.dataset,
+            on_phage_done=_on_done,
+        )
 
         print()
         html = render_html(phage_results, args.dataset, patterns)
