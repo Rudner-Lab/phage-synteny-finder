@@ -63,26 +63,29 @@ h3.section-title { font-size: 0.95em; color: #475569; margin: 24px 0 8px; font-w
 
 /* ── Global results table ── */
 .summary-table { margin-bottom: 28px; }
-.check-yes  { color: #15803d; font-weight: 700; }
-.check-one  { color: #5b21b6; font-weight: 700; }
-.check-no   { color: #cbd5e1; }
 
 /* ── Cluster sections ── */
-.cluster-section { margin-bottom: 40px; }
+.cluster-section { margin-bottom: 12px; border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; }
 .cluster-heading {
-  font-size: 1.1em; font-weight: 700; color: #1e293b;
-  padding: 8px 0 6px; border-bottom: 2px solid #e2e8f0; margin: 0 0 14px;
+  font-size: 1.05em; font-weight: 700; color: #1e293b;
+  padding: 8px 14px; background: #f1f5f9;
+  cursor: pointer; user-select: none; list-style: none;
+  display: flex; align-items: center; gap: 8px;
 }
+.cluster-heading::-webkit-details-marker { display: none; }
+.cluster-heading::marker { display: none; }
+details.cluster-section[open] > .cluster-heading { border-bottom: 2px solid #cbd5e1; }
 .cluster-heading .cs-badge {
   display: inline-block; padding: 1px 8px; border-radius: 5px;
-  background: #f1f5f9; border: 1px solid #cbd5e1;
-  font-size: 0.82em; font-weight: 400; color: #475569; margin-left: 8px;
+  background: #e2e8f0; border: 1px solid #cbd5e1;
+  font-size: 0.82em; font-weight: 400; color: #475569; margin-left: auto;
 }
+.cluster-content { padding: 10px 12px; }
 
 /* ── Phage <details> ── */
-.phage-details { margin-bottom: 10px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.phage-details { margin-bottom: 8px; border: 1px solid #e2e8f0; border-radius: 8px; }
 .phage-summary {
-  padding: 9px 14px; display: flex; justify-content: space-between;
+  padding: 8px 12px; display: flex; justify-content: space-between;
   align-items: center; flex-wrap: wrap; gap: 6px;
   cursor: pointer; user-select: none; list-style: none;
   background: #f8fafc; border-radius: 8px;
@@ -92,7 +95,14 @@ h3.section-title { font-size: 0.95em; color: #475569; margin: 24px 0 8px; font-w
 details[open] > .phage-summary { border-radius: 8px 8px 0 0; }
 .phage-name { font-weight: 700; color: #1e293b; }
 .phage-cs   { font-size: 0.82em; color: #94a3b8; margin-left: 6px; }
-.phage-body { padding: 12px 14px; border-top: 1px solid #e2e8f0; }
+.phage-stats { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; }
+.phage-stat {
+  padding: 1px 7px; border-radius: 5px; font-size: 0.78em;
+  border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; white-space: nowrap;
+}
+.phage-stat-orange { background: #fff7ed; border-color: #fed7aa; color: #c2410c; }
+.phage-stat-green  { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+.phage-body { padding: 10px 12px; border-top: 1px solid #e2e8f0; }
 .phage-no-results { padding: 8px 0; color: #94a3b8; font-style: italic; font-size: 0.88em; }
 
 /* ── Orpham cards ── */
@@ -136,46 +146,28 @@ details[open] > .phage-summary { border-radius: 8px 8px 0 0; }
 .badge-one  { background: #f0fdf4; border-color: #a7f3d0; color: #065f46; }
 .card-body  { padding: 10px 12px; border-top: 1px solid #e2e8f0; }
 
-/* ── Inline function tally ── */
-.tally-inline {
-  font-size: 0.82em; margin-bottom: 8px;
-  padding: 4px 8px; background: #f0fdf4; border-radius: 4px; border: 1px solid #bbf7d0;
+/* ── Function tally table ── */
+.tally-section { margin-bottom: 10px; }
+.tally-section-label {
+  font-size: 0.78em; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: #5b21b6; margin-bottom: 3px;
 }
-.tally-label    { font-weight: 700; margin-right: 6px; color: #166534; }
-.tally-fn-strong { font-weight: 700; color: #166534; }
-.tally-fn-dim   { color: #94a3b8; font-style: italic; }
+.tally-fn-strong { font-weight: 700; }
+.td-right { text-align: right; }
 
-/* ── Compact hit chips ── */
-.compact-hits   { margin-top: 6px; }
-.hits-group     { margin-bottom: 8px; }
+/* ── Evidence tables ── */
+.hits-section   { margin-top: 10px; }
+.hits-group     { margin-bottom: 10px; }
 .hits-group-label {
   font-size: 0.78em; font-weight: 700; text-transform: uppercase;
-  letter-spacing: 0.04em; margin-bottom: 4px;
+  letter-spacing: 0.04em; margin-bottom: 3px;
 }
 .two-label  { color: #5b21b6; }
-.one-label  { color: #065f46; cursor: pointer; display: block; }
-.one-label::-webkit-details-marker { display: none; }
-.one-label::marker { display: none; }
-.one-flank-group { border: none; outline: none; }
-.flank-sub-label { font-size: 0.78em; color: #64748b; margin: 4px 0 2px 4px; }
-.cluster-row {
-  display: flex; align-items: flex-start; gap: 5px;
-  flex-wrap: wrap; margin-bottom: 3px; padding-left: 4px;
-}
-.cluster-tag {
-  font-size: 0.78em; font-weight: 700; color: #475569;
-  background: #f1f5f9; border: 1px solid #cbd5e1; border-radius: 4px;
-  padding: 1px 6px; white-space: nowrap; margin-top: 2px; flex-shrink: 0;
-}
-.chips  { display: flex; flex-wrap: wrap; gap: 4px; }
-a.hit-chip {
-  display: inline-flex; align-items: center; gap: 3px;
-  padding: 2px 7px; background: #f8fafc; border: 1px solid #cbd5e1;
-  border-radius: 4px; font-size: 0.82em; text-decoration: none; color: #1e293b;
-}
-a.hit-chip:hover { background: #e2e8f0; text-decoration: none; }
-.chip-fn { color: #64748b; font-style: italic; font-size: 0.9em; }
+.one-label  { color: #065f46; }
+.hits-table { margin-bottom: 0; }
+.hits-table td { padding: 3px 8px; }
 .no-hits { color: #94a3b8; font-style: italic; font-size: 0.88em; }
+.hidden-note { font-size: 0.8em; color: #94a3b8; font-style: italic; padding: 2px 8px; }
 
 /* ── Shared ── */
 table { border-collapse: collapse; width: 100%; font-size: 0.84em; margin-bottom: 10px; }
@@ -258,58 +250,61 @@ def _gene_tag(phage_id: str, gene_number: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _render_inline_tally(tally_sorted: list) -> str:
-    """One-line function summary for two-flank hits."""
+def _render_tally_table(tally_sorted: list) -> str:
+    """Compact table of two-flank function counts."""
     if not tally_sorted:
         return ""
-    parts = []
+    tally_total = sum(n for _, n in tally_sorted)
+    rows_html = ""
     for fn, n in tally_sorted:
         inf = is_informative(fn)
-        cls = "tally-fn-strong" if inf else "tally-fn-dim"
-        parts.append(
-            f'<span class="{cls}">{escape(fn_display(fn))}</span>&thinsp;×{n}'
+        pct = round(100 * n / tally_total) if tally_total else 0
+        fn_cls = ' class="tally-fn-strong"' if inf and pct >= 25 else (
+                 ' class="fn-dim"' if not inf else "")
+        rows_html += (
+            f"<tr>"
+            f"<td{fn_cls}>{escape(fn_display(fn))}</td>"
+            f'<td class="td-right fn-dim">{n}&thinsp;({pct}%)</td>'
+            f"</tr>"
         )
     return (
-        f'<div class="tally-inline">'
-        f'<span class="tally-label">↑↓ functions</span>'
-        f'{"&ensp;·&ensp;".join(parts)}'
+        f'<div class="tally-section">'
+        f'<div class="tally-section-label">↑↓ function tally (n={tally_total})</div>'
+        f'<table class="hits-table"><thead><tr>'
+        f'<th>Function</th><th>Hits</th>'
+        f'</tr></thead><tbody>{rows_html}</tbody></table>'
         f'</div>'
     )
 
 
-def _chips_by_cluster(rows: list[dict]) -> str:
-    """Render rows as chip clusters: 'ClusterTag  chip chip chip'."""
-    clusters: dict[str, list[dict]] = {}
-    for r in rows:
-        clusters.setdefault(r["cluster"] or "—", []).append(r)
-
-    out = ""
-    for cl, group in sorted(clusters.items()):
-        chips = ""
-        for r in group:
-            fn = fn_display(r["gene_function"]) if r["gene_function"] else ""
-            fn_span = f'<span class="chip-fn">{escape(fn)}</span>' if fn else ""
-            draft_flag = " 🚧" if r["is_draft"] else ""
-            phage_url = _PHAGESDB_PHAGE.format(escape(r["phage"]))
-            tag = _gene_tag(r["phage"], r["gene_number"])
-            pham_title = f'pham {r["candidate_pham"]}' if r["candidate_pham"] else "orpham"
-            chips += (
-                f'<a class="hit-chip" href="{phage_url}" target="_blank"'
-                f' title="{escape(pham_title)}">'
-                f'{escape(tag)}{escape(draft_flag)}'
-                f'{fn_span}</a>'
-            )
-        out += (
-            f'<div class="cluster-row">'
-            f'<span class="cluster-tag">{escape(cl)}</span>'
-            f'<span class="chips">{chips}</span>'
-            f'</div>'
+def _hit_rows(rows: list[dict], show_flank: bool = False) -> tuple[str, int]:
+    """Render informative hits as <tr> elements; return (html, n_hidden)."""
+    informative = [r for r in rows if is_informative(r["gene_function"])]
+    hidden = len(rows) - len(informative)
+    tbody = ""
+    for r in informative:
+        flank_td = ""
+        if show_flank:
+            sym = "↑" if r["up_match"] else "↓"
+            flank_td = f'<td class="td-center fn-dim">{sym}</td>'
+        phage_url = _PHAGESDB_PHAGE.format(escape(r["phage"]))
+        tag = _gene_tag(r["phage"], r["gene_number"])
+        pham_title = f'pham {r["candidate_pham"]}' if r["candidate_pham"] else "orpham"
+        draft_flag = " 🚧" if r["is_draft"] else ""
+        tbody += (
+            f"<tr>{flank_td}"
+            f'<td class="fn-dim" style="white-space:nowrap">{escape(r["cluster"])}</td>'
+            f'<td style="white-space:nowrap">'
+            f'<a href="{phage_url}" target="_blank" title="{escape(pham_title)}">'
+            f'{escape(tag)}</a>{escape(draft_flag)}</td>'
+            f"<td>{escape(fn_display(r['gene_function']))}</td>"
+            f"</tr>"
         )
-    return out
+    return tbody, hidden
 
 
-def _render_compact_hits(hits: list[dict]) -> str:
-    """Render syntenic hits as compact chips grouped by flank type then cluster."""
+def _render_hits_table(hits: list[dict]) -> str:
+    """Render syntenic hits as simple tables, informative-only, by flank type."""
     if not hits:
         return '<p class="no-hits">No syntenic hits found.</p>'
 
@@ -320,35 +315,47 @@ def _render_compact_hits(hits: list[dict]) -> str:
     out = ""
 
     if two_sided:
+        tbody, hidden = _hit_rows(two_sided)
+        hidden_note = (
+            f'<tr><td colspan="3" class="hidden-note">'
+            f'+ {hidden} NKF/hypothetical hit{"s" if hidden != 1 else ""} not shown'
+            f'</td></tr>' if hidden else ""
+        )
         out += (
             f'<div class="hits-group">'
             f'<div class="hits-group-label two-label">↑↓ two-flank ({len(two_sided)})</div>'
-            f'{_chips_by_cluster(two_sided)}'
+            f'<table class="hits-table"><thead><tr>'
+            f'<th>Subcluster</th><th>Gene</th><th>Function</th>'
+            f'</tr></thead><tbody>{tbody}{hidden_note}</tbody></table>'
             f'</div>'
         )
 
     one_count = len(up_only) + len(dn_only)
     if one_count:
-        inner = ""
-        if up_only:
-            inner += (
-                f'<div class="flank-sub-label">↑ upstream-matched ({len(up_only)})</div>'
-                f'{_chips_by_cluster(up_only)}'
-            )
-        if dn_only:
-            inner += (
-                f'<div class="flank-sub-label">↓ downstream-matched ({len(dn_only)})</div>'
-                f'{_chips_by_cluster(dn_only)}'
-            )
+        up_body, up_hidden = _hit_rows(up_only, show_flank=True)
+        dn_body, dn_hidden = _hit_rows(dn_only, show_flank=True)
+        tbody  = up_body + dn_body
+        hidden = up_hidden + dn_hidden
+        hidden_note = (
+            f'<tr><td colspan="4" class="hidden-note">'
+            f'+ {hidden} NKF/hypothetical hit{"s" if hidden != 1 else ""} not shown'
+            f'</td></tr>' if hidden else ""
+        )
+        inner = (
+            f'<table class="hits-table"><thead><tr>'
+            f'<th>Flank</th><th>Subcluster</th><th>Gene</th><th>Function</th>'
+            f'</tr></thead><tbody>{tbody}{hidden_note}</tbody></table>'
+            if tbody or hidden_note else
+            '<p class="no-hits" style="margin:4px 0">All one-flank hits are NKF/hypothetical.</p>'
+        )
         out += (
-            f'<details class="hits-group one-flank-group">'
-            f'<summary class="hits-group-label one-label">'
-            f'↑ or ↓ one-flank ({one_count}) ▸</summary>'
+            f'<div class="hits-group">'
+            f'<div class="hits-group-label one-label">↑ or ↓ one-flank ({one_count})</div>'
             f'{inner}'
-            f'</details>'
+            f'</div>'
         )
 
-    return f'<div class="compact-hits">{out}</div>'
+    return f'<div class="hits-section">{out}</div>'
 
 
 def _render_orpham_card(o: dict, phage_id: str) -> str:
@@ -399,11 +406,11 @@ def _render_orpham_card(o: dict, phage_id: str) -> str:
     )
     body = (
         f'<div class="card-body">'
-        f'{_render_inline_tally(o["tally_sorted"])}'
-        f'{_render_compact_hits(o["hits"])}'
+        f'{_render_tally_table(o["tally_sorted"])}'
+        f'{_render_hits_table(o["hits"])}'
         f'</div>'
     )
-    return f'<div class="orpham-card" id="card-{anchor}"><details open>{summary_el}{body}</details></div>'
+    return f'<div class="orpham-card" id="card-{anchor}"><details>{summary_el}{body}</details></div>'
 
 
 # ---------------------------------------------------------------------------
@@ -448,7 +455,7 @@ def _results_table(rows: list[tuple[str, dict]], title: str, title_cls: str) -> 
         )
     return (
         f'<h3 class="section-title {title_cls}">{title} ({len(rows)})</h3>'
-        f'<table class="summary-table"><{thead}<tbody>{tbody}</tbody></table>'
+        f'<table class="summary-table">{thead}<tbody>{tbody}</tbody></table>'
     )
 
 
@@ -481,41 +488,33 @@ def _render_global_results_table(
 # ---------------------------------------------------------------------------
 
 
-def _render_phage_section(phage_id: str, cs: str, orpham_results: list[dict], summary: dict) -> str:
-    n_shown   = summary["with_informative"]
-    has_results = n_shown > 0
-
-    mini_summary = (
-        '<div class="summary">'
-        + _stat("stat-slate",  "total genes",   summary["total_genes"])
-        + _stat("stat-orange", "orphams",        summary["total_orphams"])
-        + _stat("stat-green",  "shown",          n_shown)
-        + "</div>"
+def _phage_mini_stats(summary: dict, n_shown: int) -> str:
+    stats = (
+        f'<span class="phage-stat">{summary["total_genes"]} genes</span>'
+        f'<span class="phage-stat phage-stat-orange">{summary["total_orphams"]} orphams</span>'
     )
+    if n_shown:
+        stats += f'<span class="phage-stat phage-stat-green">→ {n_shown} shown</span>'
+    return f'<span class="phage-stats">{stats}</span>'
+
+
+def _render_phage_section(phage_id: str, cs: str, orpham_results: list[dict], summary: dict) -> str:
+    n_shown     = summary["with_informative"]
+    has_results = n_shown > 0
 
     if has_results:
         cards = "\n".join(_render_orpham_card(o, phage_id) for o in orpham_results)
-        body_content = mini_summary + cards
+        body_content = cards
     else:
-        body_content = (
-            mini_summary +
-            '<p class="phage-no-results">No orphams with strong informative evidence.</p>'
-        )
+        body_content = '<p class="phage-no-results">No orphams with strong informative evidence.</p>'
 
     cs_span = f'<span class="phage-cs">{escape(cs)}</span>' if cs else ""
-    orpham_count_span = (
-        f' <span style="font-size:0.82em;color:#15803d;font-weight:600">'
-        f'→ {n_shown} result{"s" if n_shown != 1 else ""}</span>'
-        if has_results else
-        f' <span style="font-size:0.82em;color:#94a3b8">(no results)</span>'
-    )
 
     return (
-        f'<details class="phage-details" id="{_phage_anchor(phage_id)}"'
-        f'{" open" if has_results else ""}>'
+        f'<details class="phage-details" id="{_phage_anchor(phage_id)}">'
         f'<summary class="phage-summary">'
-        f'<span><span class="phage-name">{_phage_link(phage_id)}</span>'
-        f'{cs_span}{orpham_count_span}</span>'
+        f'<span><span class="phage-name">{_phage_link(phage_id)}</span>{cs_span}</span>'
+        f'{_phage_mini_stats(summary, n_shown)}'
         f'</summary>'
         f'<div class="phage-body">{body_content}</div>'
         f'</details>'
@@ -534,15 +533,18 @@ def _render_cluster_section(cluster: str, phage_entries: list[tuple[str, str, li
         f'<span class="cs-badge">{n_phages} phage{"s" if n_phages != 1 else ""}'
         f'{f", {n_with_results} with results" if n_with_results else ""}</span>'
     )
-    heading = (
-        f'<div class="cluster-heading" id="cluster-{escape(cluster)}">'
-        f'Cluster {escape(cluster or "Singletons")}{cs_badge}</div>'
-    )
     phage_sections = "\n".join(
         _render_phage_section(pid, cs, results, summary)
         for pid, cs, results, summary in phage_entries
     )
-    return f'<div class="cluster-section">{heading}{phage_sections}</div>'
+    return (
+        f'<details class="cluster-section" id="cluster-{escape(cluster)}" open>'
+        f'<summary class="cluster-heading">'
+        f'Cluster {escape(cluster or "Singletons")}{cs_badge}'
+        f'</summary>'
+        f'<div class="cluster-content">{phage_sections}</div>'
+        f'</details>'
+    )
 
 
 # ---------------------------------------------------------------------------
