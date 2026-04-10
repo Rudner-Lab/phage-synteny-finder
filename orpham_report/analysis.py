@@ -333,9 +333,10 @@ def compute_function_tallies(
 
     tally: dict[str, int] = defaultdict(int)
     for r in hits:
+        if not r["two_sided"]:
+            continue
         fn = r["gene_function"].strip() or "Hypothetical protein"
-        if fn in both_fns:
-            tally[fn] += 1
+        tally[fn] += 1
 
     tally_sorted = sorted(tally.items(), key=lambda x: -x[1])
     return tally_sorted, sum(tally.values()), both_fns
