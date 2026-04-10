@@ -484,17 +484,21 @@ def _top_fn(o: dict) -> str:
     return ""
 
 
-def _results_table(rows: list[tuple[str, dict]], title: str, title_cls: str) -> str:
-    """Render one results sub-table (two-flank or one-flank section)."""
+def _results_table(rows: list[tuple[str, str, dict]], title: str, title_cls: str) -> str:
+    """Render one results sub-table (two-flank or one-flank section).
+
+    Each row is (phage_id, subcluster, orpham_result_dict).
+    """
     thead = (
         "<thead><tr>"
+        "<th>Subcluster</th>"
         "<th>Phage</th>"
         "<th>Gene (position)</th>"
         "<th>Top function</th>"
         "</tr></thead>"
     )
     tbody = ""
-    for phage_id, o in rows:
+    for phage_id, subcluster, o in rows:
         anchor = _orpham_anchor(phage_id, o["gene_number"])
         start  = o["start"] if o["start"] is not None else "?"
         stop   = o["stop"]  if o["stop"]  is not None else "?"
@@ -502,6 +506,7 @@ def _results_table(rows: list[tuple[str, dict]], title: str, title_cls: str) -> 
         fn_cell = f'<td>{escape(fn)}</td>' if fn else '<td class="fn-dim">—</td>'
         tbody += (
             f"<tr>"
+            f'<td class="fn-dim" style="white-space:nowrap">{escape(subcluster)}</td>'
             f'<td><a href="#{_phage_anchor(phage_id)}">{escape(phage_id)}</a></td>'
             f'<td><a href="#card-{anchor}">{escape(o["gene_number"])}</a>'
             f' <span class="fn-dim">({escape(str(start))}–{escape(str(stop))} bp)</span></td>'
@@ -517,18 +522,18 @@ def _results_table(rows: list[tuple[str, dict]], title: str, title_cls: str) -> 
 def _render_global_results_table(
     cluster_data: dict[str, list[tuple[str, str, list[dict], dict]]]
 ) -> str:
-    all_rows: list[tuple[str, dict]] = [
-        (phage_id, o)
-        for entries in cluster_data.values()
-        for phage_id, _, orpham_results, _ in entries
+    all_rows: list[tuple[str, str, dict]] = [
+        (phage_id, cs or cluster, o)
+        for cluster, entries in cluster_data.items()
+        for phage_id, cs, orpham_results, _ in entries
         for o in orpham_results
     ]
 
     if not all_rows:
         return ""
 
-    two_rows = [(pid, o) for pid, o in all_rows if o["n_two_sided"] > 0]
-    one_rows = [(pid, o) for pid, o in all_rows if o["n_two_sided"] == 0 and o["n_one_sided"] > 0]
+    two_rows = [(pid, sc, o) for pid, sc, o in all_rows if o["n_two_sided"] > 0]
+    one_rows = [(pid, sc, o) for pid, sc, o in all_rows if o["n_two_sided"] == 0 and o["n_one_sided"] > 0]
 
     out = ""
     if two_rows:
