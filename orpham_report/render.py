@@ -122,6 +122,7 @@ details[open] > .phage-summary { border-radius: 8px 8px 0 0; }
   border: 1px solid #e2e8f0; background: #f8fafc; color: #64748b; white-space: nowrap;
 }
 .phage-stat-orange { background: #fff7ed; border-color: #fed7aa; color: #c2410c; }
+.phage-stat-purple { background: #faf5ff; border-color: #e9d5ff; color: #6d28d9; }
 .phage-stat-green  { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
 .phage-body { padding: 10px 12px; border-top: 1px solid #e2e8f0; }
 .phage-no-results { padding: 8px 0; color: #94a3b8; font-style: italic; font-size: 0.88em; }
@@ -163,11 +164,11 @@ details[open] > .phage-summary { border-radius: 8px 8px 0 0; }
 }
 .flank-badge {
   padding: 2px 8px; border-radius: 5px; font-size: 0.8em;
-  background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534;
+  background: #f8fafc; border: 1px solid #e2e8f0; color: #64748b;
   white-space: nowrap;
 }
-.badge-two  { background: #ede9fe; border-color: #c4b5fd; color: #5b21b6; }
-.badge-one  { background: #f0fdf4; border-color: #a7f3d0; color: #065f46; }
+.badge-two  { background: #f0fdf4; border-color: #bbf7d0; color: #15803d; }
+.badge-one  { background: #fff7ed; border-color: #fed7aa; color: #c2410c; }
 .card-body  { padding: 10px 12px; border-top: 1px solid #e2e8f0; }
 
 /* ── Function tally table ── */
@@ -597,7 +598,7 @@ def _render_global_results_table(
 def _phage_mini_stats(summary: dict, n_shown: int) -> str:
     stats = (
         f'<span class="phage-stat">{summary["total_genes"]} genes</span>'
-        f'<span class="phage-stat phage-stat-orange">{summary["total_orphams"]} orphams</span>'
+        f'<span class="phage-stat phage-stat-purple">{summary["total_orphams"]} orphams</span>'
     )
     if n_shown:
         stats += f'<span class="phage-stat phage-stat-green">{n_shown} insight{"s" if n_shown != 1 else ""}</span>'
