@@ -100,7 +100,11 @@ details.cluster-section[open] > .cluster-heading { border-bottom: 2px solid #cbd
 .cluster-content { padding: 10px 12px; }
 
 /* ── Phage <details> ── */
-.phage-details { margin-bottom: 8px; border: 1px solid #e2e8f0; border-radius: 8px; }
+.phage-details {
+  margin-bottom: 8px; border: 1px solid #e2e8f0; border-radius: 8px;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 60px;
+}
 .phage-summary {
   padding: 8px 12px; display: flex; justify-content: space-between;
   align-items: center; flex-wrap: wrap; gap: 6px;
@@ -128,6 +132,8 @@ details[open] > .phage-summary { border-radius: 8px 8px 0 0; }
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   overflow: hidden;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 50px;
 }
 .card-header {
   padding: 8px 12px;
