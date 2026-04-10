@@ -169,6 +169,22 @@ details[open] > .phage-summary { border-radius: 8px 8px 0 0; }
 .no-hits { color: #94a3b8; font-style: italic; font-size: 0.88em; }
 .hidden-note { font-size: 0.8em; color: #94a3b8; font-style: italic; padding: 2px 8px; }
 
+/* ── Section headings ── */
+.section-heading {
+  font-size: 0.72em; font-weight: 700; color: #94a3b8;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  margin: 28px 0 10px; padding-bottom: 5px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.section-heading:first-child { margin-top: 0; }
+
+/* ── Intro paragraph ── */
+.report-intro {
+  font-size: 0.88em; color: #475569; line-height: 1.65;
+  margin: 0 0 24px; max-width: 820px;
+}
+.report-intro strong { color: #334155; }
+
 /* ── Shared ── */
 table { border-collapse: collapse; width: 100%; font-size: 0.84em; margin-bottom: 10px; }
 th {
@@ -227,6 +243,10 @@ def _phage_link(phage_id: str, is_draft: bool = False) -> str:
     return f'<a href="{url}" target="_blank">{escape(phage_id)}</a>{draft}'
 
 
+def _section_heading(text: str) -> str:
+    return f'<h3 class="section-heading">{escape(text)}</h3>'
+
+
 def _stat(cls: str, label: str, n: int) -> str:
     return f'<div class="stat {cls}"><b>{n}</b> {label}</div>'
 
@@ -250,28 +270,51 @@ def _gene_tag(phage_id: str, gene_number: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _render_tally_table(tally_sorted: list) -> str:
-    """Compact table of two-flank function counts."""
-    if not tally_sorted:
+def _render_tally_table(tally_sorted: list, one_fns_sorted: list) -> str:
+    """Compact table of hit counts broken down by two-sided / ↑ only / ↓ only."""
+    two_dict = dict(tally_sorted)
+    one_dict = dict(one_fns_sorted)
+    all_fns  = list(dict.fromkeys(
+        [fn for fn, _ in tally_sorted] +
+        [fn for fn, _ in one_fns_sorted]
+    ))
+    if not all_fns:
         return ""
-    tally_total = sum(n for _, n in tally_sorted)
+
+    col_two = sum(two_dict.values())
+    col_up  = sum(c["up"] for c in one_dict.values())
+    col_dn  = sum(c["dn"] for c in one_dict.values())
+    total   = col_two + col_up + col_dn
+
+    def _n(v: int, col_total: int) -> str:
+        if not v:
+            return '<span class="fn-dim">—</span>'
+        pct = round(100 * v / col_total) if col_total else 0
+        return f'{v} <span class="fn-dim">({pct}%)</span>'
+
     rows_html = ""
-    for fn, n in tally_sorted:
-        inf = is_informative(fn)
-        pct = round(100 * n / tally_total) if tally_total else 0
-        fn_cls = ' class="tally-fn-strong"' if inf and pct >= 25 else (
-                 ' class="fn-dim"' if not inf else "")
+    for fn in all_fns:
+        inf  = is_informative(fn)
+        two  = two_dict.get(fn, 0)
+        up   = one_dict.get(fn, {}).get("up", 0)
+        dn   = one_dict.get(fn, {}).get("dn", 0)
+        fn_cls = ' class="tally-fn-strong"' if inf else ' class="fn-dim"'
         rows_html += (
             f"<tr>"
             f"<td{fn_cls}>{escape(fn_display(fn))}</td>"
-            f'<td class="td-right fn-dim">{n}&thinsp;({pct}%)</td>'
+            f'<td class="td-right">{_n(two, col_two)}</td>'
+            f'<td class="td-right">{_n(up, col_up)}</td>'
+            f'<td class="td-right">{_n(dn, col_dn)}</td>'
             f"</tr>"
         )
     return (
         f'<div class="tally-section">'
-        f'<div class="tally-section-label">↑↓ function tally (n={tally_total})</div>'
+        f'<div class="tally-section-label">Function tally (n={total})</div>'
         f'<table class="hits-table"><thead><tr>'
-        f'<th>Function</th><th>Hits</th>'
+        f'<th>Function</th>'
+        f'<th class="td-right">Two-sided</th>'
+        f'<th class="td-right">↑ only</th>'
+        f'<th class="td-right">↓ only</th>'
         f'</tr></thead><tbody>{rows_html}</tbody></table>'
         f'</div>'
     )
@@ -406,7 +449,7 @@ def _render_orpham_card(o: dict, phage_id: str) -> str:
     )
     body = (
         f'<div class="card-body">'
-        f'{_render_tally_table(o["tally_sorted"])}'
+        f'{_render_tally_table(o["tally_sorted"], o["one_fns_sorted"])}'
         f'{_render_hits_table(o["hits"])}'
         f'</div>'
     )
@@ -640,6 +683,21 @@ def render_html(
         for cluster, entries in cluster_data.items()
     )
 
+    intro = (
+        '<p class="report-intro">'
+        "<strong>Orpham genes</strong> are phage-encoded genes whose protein family (pham) "
+        "is found in only one phage in the dataset — they have no known homologs and carry "
+        "no direct function annotation. This report searches for <strong>syntenic evidence</strong> "
+        "of their putative function: for each orpham, the upstream and downstream flanking phams "
+        "are identified, and all other phages carrying those phams are scanned for a gene at the "
+        "equivalent syntenic position. The function of that neighboring gene is used as a proxy "
+        "for what the orpham might encode. Hits where <strong>both flanks match</strong> "
+        "(two-sided) are stronger evidence; hits where <strong>one flank matches</strong> "
+        "(one-sided) are also reported. Only orphams with at least one informative "
+        "(non-NKF/hypothetical) function assignment are shown."
+        "</p>"
+    )
+
     return (
         "<!DOCTYPE html>\n"
         '<html lang="en">\n'
@@ -655,9 +713,14 @@ def render_html(
         f' &nbsp;·&nbsp; Dataset: {escape(dataset)}'
         f' &nbsp;·&nbsp; <span style="font-size:0.88em;color:#94a3b8">Generated {generated}</span>'
         f"</h2>\n"
+        f"{_section_heading('Overview')}\n"
         f"{overall_html}\n"
+        f"{intro}\n"
+        f"{_section_heading('Results at a Glance')}\n"
         f"{results_table_html}\n"
+        f"{_section_heading('Phage Index')}\n"
         f"{toc_html}\n"
+        f"{_section_heading('Evidence by Phage')}\n"
         f"{body_html}\n"
         "</body>\n"
         "</html>"

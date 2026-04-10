@@ -19,3 +19,6 @@ venv/
 
 # Don't commit output in case this repo is published (cannot re-distribute phamerator data)
 output/
+
+# AI config
+.claude
