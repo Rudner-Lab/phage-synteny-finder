@@ -81,29 +81,26 @@ class TestRenderHtml:
 
     def test_non_passing_orpham_not_shown(self, db):
         # Alpha's orpham doesn't pass → its pham_orpham_A should not appear as a card title
-        results = _build_results(db, ["A"])
-        html = render_html(results, DATASET, ["A"])
+        results = _build_results(db, ["A1"])
+        html = render_html(results, DATASET, ["A1"])
         # pham_orpham_A only appears if the card is rendered
         assert "pham_orpham_A" not in html
 
-    def test_no_results_phage_collapsed(self, db):
-        # Alpha's phage section should NOT have the "open" attribute (no results)
-        results = _build_results(db, ["A"])
-        html = render_html(results, DATASET, ["A"])
-        # Find Alpha's phage-details block and check it lacks " open"
-        idx = html.find('id="phage-Alpha"')
-        assert idx != -1
-        tag = html[idx - 50: idx + 100]
-        assert "open" not in tag
+    def test_no_results_phage_in_omitted_footer(self, db):
+        # Alpha has orphams but no informative results → in omitted footer, not a phage section
+        results = _build_results(db, ["A1"])
+        html = render_html(results, DATASET, ["A1"])
+        assert 'id="phage-Alpha"' not in html          # not a phage-details section
+        assert "Alpha" in html                          # still mentioned in omitted footer
 
-    def test_results_phage_open(self, db):
-        # Gamma's phage section SHOULD have the "open" attribute
+    def test_phage_sections_always_collapsed(self, db):
+        # Phage <details> sections never have the "open" attribute, even with results
         results = _build_results(db, ["B"])
         html = render_html(results, DATASET, ["B"])
         idx = html.find('id="phage-Gamma"')
         assert idx != -1
         tag = html[idx - 50: idx + 100]
-        assert "open" in tag
+        assert "open" not in tag
 
     def test_empty_results_list(self, db):
         html = render_html([], DATASET, ["ZZZ"])
@@ -118,8 +115,8 @@ class TestRenderHtml:
         assert "Epsilon" in html
 
     def test_title_reflects_pattern(self, db):
-        results = _build_results(db, ["A"])
-        html = render_html(results, DATASET, ["A"])
+        results = _build_results(db, ["A1"])
+        html = render_html(results, DATASET, ["A1"])
         assert "Cluster A" in html
 
     def test_title_all(self, db):

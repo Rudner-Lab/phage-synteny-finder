@@ -7,8 +7,10 @@ the report's full pipeline:
 Phages (dataset "Test"):
   Alpha   cluster A  subcluster A1  → 5 genes, 1 orpham (gene 3)
   Beta    cluster A  subcluster A1  → 5 genes, shares phams with Alpha
-  Gamma   cluster B  no subcluster  → 4 genes, 1 orpham (gene 2) with informative function
-  Delta   cluster B  no subcluster  → 4 genes (pham neighbours of Gamma's orpham)
+  Zeta    cluster A  no subcluster  → 0 genes (tests unsubclustered "A" pattern)
+  Gamma   cluster B  subcluster B   → 4 genes, 1 orpham (gene 2) with informative function
+  Delta   cluster B  subcluster B   → 4 genes (pham neighbours of Gamma's orpham)
+  Epsilon cluster C  no subcluster  → 0 genes, is_draft=1
 
 Pham membership summary:
   pham_shared_up   – in Alpha genes[1], Beta genes[1]         (non-orpham)
@@ -24,7 +26,7 @@ Alpha gene 3 (pham_orpham_A): flanked by pham_shared_up / pham_shared_dn.
   Beta has the same flanking context around gene 3, but its gene 2 is pham_b_candidate
   (function "NKF") → Alpha's orpham will NOT pass the filter.
 
-Gamma gene 2 (pham_orpham_B): flanked by pham_b_up / pham_b_dn.
+Gamma gene 3 (pham_orpham_B): flanked by pham_b_up / pham_b_dn.
   Delta carries both flanking phams; its central gene has pham_b_candidate / function "lysin A"
   → Gamma's orpham WILL pass the filter (two-sided hit with informative function).
 """
@@ -69,11 +71,12 @@ def _phage(phage_id, cluster, subcluster, cs, is_draft=0):
 
 
 PHAGES = [
-    _phage("Alpha",  "A", "1", "A1"),
-    _phage("Beta",   "A", "1", "A1"),
-    _phage("Gamma",  "B", "",  "B"),
-    _phage("Delta",  "B", "",  "B"),
-    _phage("Epsilon","C", "",  "C", is_draft=1),  # draft phage, no genes → empty result
+    _phage("Alpha",   "A", "1", "A1"),
+    _phage("Beta",    "A", "1", "A1"),
+    _phage("Zeta",    "A", "",  ""),   # unsubclustered in cluster A → tests bare "A" pattern
+    _phage("Gamma",   "B", "",  "B"),
+    _phage("Delta",   "B", "",  "B"),
+    _phage("Epsilon", "C", "",  "C", is_draft=1),  # draft phage, no genes → empty result
 ]
 
 # Alpha: genes 1-5, gene 3 is orpham flanked by shared_up (gene 2) and shared_dn (gene 4)

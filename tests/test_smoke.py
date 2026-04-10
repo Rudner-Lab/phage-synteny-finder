@@ -51,11 +51,17 @@ class TestRealDbAnalysis:
 
 
 class TestRealDbClusters:
-    def test_cluster_F_count(self, real_db):
+    def test_cluster_F_wildcard_count(self, real_db):
         from orpham_report.db import resolve_cluster_phages
-        rows = resolve_cluster_phages(real_db, ["F"], REAL_DATASET)
-        # All F subclusters: F, F1, F2, F3, F4, F5, F6, F7 → 273 phages
+        # "F*" wildcard: all phages in cluster F regardless of subcluster → 273
+        rows = resolve_cluster_phages(real_db, ["F*"], REAL_DATASET)
         assert len(rows) == 273
+
+    def test_cluster_F_unsubclustered(self, real_db):
+        from orpham_report.db import resolve_cluster_phages
+        # "F" bare: only phages in cluster F with no subcluster assigned
+        rows = resolve_cluster_phages(real_db, ["F"], REAL_DATASET)
+        assert len(rows) == 4
 
     def test_subcluster_F1_count(self, real_db):
         from orpham_report.db import resolve_cluster_phages
@@ -72,7 +78,8 @@ class TestRealDbClusters:
 
     def test_no_duplicates(self, real_db):
         from orpham_report.db import resolve_cluster_phages
-        rows = resolve_cluster_phages(real_db, ["F", "F1"], REAL_DATASET)
+        # "F*" includes all of cluster F; "F1" is a subset — no duplicates expected
+        rows = resolve_cluster_phages(real_db, ["F*", "F1"], REAL_DATASET)
         ids = [r[0] for r in rows]
         assert len(ids) == len(set(ids))
 

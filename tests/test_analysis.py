@@ -308,14 +308,16 @@ class TestComputeFunctionTallies:
         assert "lysin A" not in both_fns
 
     def test_cross_flank_qualification(self):
-        # fn appears in one up-only AND one dn-only hit → qualifies
+        # fn appears in one up-only AND one dn-only hit → qualifies for both_fns
+        # but tally only counts two_sided hits, so tally total is 0
         hits = self._make_hits([
             ("lysin A", True, False),
             ("lysin A", False, True),
         ])
         tally, total, both_fns = compute_function_tallies(hits)
-        assert "lysin A" in both_fns
-        assert total == 2
+        assert "lysin A" in both_fns           # qualifies for filtering
+        assert total == 0                       # no two_sided hits → tally is empty
+        assert dict(tally).get("lysin A", 0) == 0
 
     def test_empty_hits(self):
         tally, total, both_fns = compute_function_tallies([])
@@ -425,5 +427,153 @@ class TestComputePhageResults:
     def test_empty_phage(self, db):
         # Epsilon has is_draft=1 but no genes
         passing, summary = compute_phage_results(db, "Epsilon", DATASET)
+        assert passing == []
+        assert summary["total_genes"] == 0
+
+
+# ---------------------------------------------------------------------------
+# compute_function_tallies — counting invariants
+# ---------------------------------------------------------------------------
+
+
+class TestComputeFunctionTalliesInvariants:
+    """Key invariant: sum(tally) == number of two_sided hits."""
+
+    def _make_hits(self, pairs):
+        return [
+            {"gene_function": fn, "up_match": um, "dn_match": dm, "two_sided": um and dm}
+            for fn, um, dm in pairs
+        ]
+
+    def test_tally_total_equals_n_two_sided(self):
+        hits = self._make_hits([
+            ("lysin A", True,  True),   # two-sided
+            ("portal",  True,  True),   # two-sided
+            ("nkf",     True,  False),  # up-only
+            ("nkf",     False, True),   # dn-only
+        ])
+        _, total, _ = compute_function_tallies(hits)
+        n_two_sided = sum(1 for h in hits if h["two_sided"])
+        assert total == n_two_sided  # invariant: tally total == two-sided count
+
+    def test_cross_flank_in_both_fns_but_not_tally(self):
+        # fn on both flanks via separate one-sided hits → qualifies filter but not tally
+        hits = self._make_hits([
+            ("lysin A", True,  False),
+            ("lysin A", False, True),
+        ])
+        tally, total, both_fns = compute_function_tallies(hits)
+        assert "lysin A" in both_fns             # cross-flank → filter qualifies
+        assert total == 0                         # no two-sided hits
+        assert dict(tally).get("lysin A", 0) == 0
+
+    def test_multiple_two_sided_same_function(self):
+        hits = self._make_hits([
+            ("lysin A", True, True),
+            ("lysin A", True, True),
+            ("lysin A", True, True),
+        ])
+        tally, total, _ = compute_function_tallies(hits)
+        assert dict(tally)["lysin A"] == 3
+        assert total == 3
+
+    def test_mixed_two_sided_and_one_sided_tally_counts_only_two(self):
+        # One two-sided + two one-sided hits for the same function: tally = 1
+        hits = self._make_hits([
+            ("lysin A", True,  True),   # two-sided → counted
+            ("lysin A", True,  False),  # up-only → NOT in tally
+            ("lysin A", False, True),   # dn-only → NOT in tally
+        ])
+        tally, total, both_fns = compute_function_tallies(hits)
+        assert dict(tally)["lysin A"] == 1
+        assert total == 1
+        assert "lysin A" in both_fns
+
+    def test_blank_function_normalised_in_tally(self):
+        hits = self._make_hits([("", True, True)])
+        tally, total, both_fns = compute_function_tallies(hits)
+        assert dict(tally).get("Hypothetical protein", 0) == 1
+        assert total == 1
+        assert "Hypothetical protein" in both_fns
+
+    def test_purely_one_sided_hits_produce_empty_tally(self):
+        hits = self._make_hits([
+            ("lysin A", True,  False),
+            ("portal",  False, True),
+        ])
+        tally, total, _ = compute_function_tallies(hits)
+        assert tally == []
+        assert total == 0
+
+
+# ---------------------------------------------------------------------------
+# compute_cluster_results — batch pipeline
+# ---------------------------------------------------------------------------
+
+
+class TestComputeClusterResults:
+    def test_returns_all_phages(self, db):
+        from orpham_report.analysis import compute_cluster_results
+        results = compute_cluster_results(db, ["Alpha", "Beta", "Gamma", "Delta"], DATASET)
+        assert len(results) == 4
+        assert {r[0] for r in results} == {"Alpha", "Beta", "Gamma", "Delta"}
+
+    def test_results_in_input_order(self, db):
+        from orpham_report.analysis import compute_cluster_results
+        phage_ids = ["Delta", "Alpha", "Gamma", "Beta"]
+        results = compute_cluster_results(db, phage_ids, DATASET)
+        assert [r[0] for r in results] == phage_ids
+
+    def test_matches_single_phage_results(self, db):
+        # Batch results for Gamma must equal the single-phage pipeline output
+        from orpham_report.analysis import compute_cluster_results
+        batch = compute_cluster_results(db, ["Gamma"], DATASET)
+        single_passing, single_summary = compute_phage_results(db, "Gamma", DATASET)
+        _, batch_passing, batch_summary = batch[0]
+        assert len(batch_passing) == len(single_passing)
+        assert batch_summary == single_summary
+
+    def test_gamma_informative_count_matches(self, db):
+        from orpham_report.analysis import compute_cluster_results
+        results = compute_cluster_results(db, ["Gamma"], DATASET)
+        _, passing, summary = results[0]
+        assert summary["with_informative"] == 1
+        assert len(passing) == 1
+
+    def test_alpha_zero_informative(self, db):
+        from orpham_report.analysis import compute_cluster_results
+        results = compute_cluster_results(db, ["Alpha"], DATASET)
+        _, passing, summary = results[0]
+        assert summary["with_informative"] == 0
+        assert passing == []
+
+    def test_callback_called_for_each_phage(self, db):
+        from orpham_report.analysis import compute_cluster_results
+        seen = []
+        compute_cluster_results(
+            db, ["Alpha", "Gamma"], DATASET,
+            on_phage_done=lambda pid, passing, summary: seen.append(pid),
+        )
+        assert set(seen) == {"Alpha", "Gamma"}
+
+    def test_callback_receives_correct_summary(self, db):
+        from orpham_report.analysis import compute_cluster_results
+        summaries = {}
+        compute_cluster_results(
+            db, ["Gamma"], DATASET,
+            on_phage_done=lambda pid, passing, summary: summaries.update({pid: summary}),
+        )
+        assert summaries["Gamma"]["with_informative"] == 1
+        assert summaries["Gamma"]["total_orphams"] == 2
+
+    def test_empty_phage_list(self, db):
+        from orpham_report.analysis import compute_cluster_results
+        assert compute_cluster_results(db, [], DATASET) == []
+
+    def test_phage_with_no_genes(self, db):
+        from orpham_report.analysis import compute_cluster_results
+        results = compute_cluster_results(db, ["Epsilon"], DATASET)
+        assert len(results) == 1
+        _, passing, summary = results[0]
         assert passing == []
         assert summary["total_genes"] == 0
