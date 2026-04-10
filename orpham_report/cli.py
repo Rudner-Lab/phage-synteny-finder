@@ -6,10 +6,13 @@ Usage examples
   # Single subcluster
   .venv/bin/python report_orpham_synteny.py --cluster F1
 
-  # All F subclusters (wildcard)
+  # Unsubclustered phages in cluster F only
+  .venv/bin/python report_orpham_synteny.py --cluster F
+
+  # All phages in cluster F (any subcluster or none)
   .venv/bin/python report_orpham_synteny.py --cluster "F*"
 
-  # Multiple explicit clusters
+  # Multiple explicit patterns
   .venv/bin/python report_orpham_synteny.py --cluster F1 F2 K1
 
   # Entire dataset
@@ -31,7 +34,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         description=(
             "Generate an HTML orpham synteny report for one or more phage clusters.\n\n"
             "Cluster patterns:\n"
-            "  F       → all phages in cluster F (any subcluster)\n"
+            "  F*      → all phages in cluster F (any subcluster or none)\n"
+            "  F       → phages in cluster F with no subcluster assigned\n"
             "  F1      → phages in subcluster F1 only\n"
             "  all     → every phage in the dataset"
         ),
