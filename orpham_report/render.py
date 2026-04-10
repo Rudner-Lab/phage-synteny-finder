@@ -8,10 +8,23 @@ Public entry point: ``render_html(phage_results, dataset, patterns)``
 """
 from __future__ import annotations
 
+import base64
 import html as _html
 from datetime import datetime, timezone
+from pathlib import Path
 
 from .analysis import fn_display, is_informative
+
+# ---------------------------------------------------------------------------
+# Favicon (embedded as base64 to keep the report self-contained)
+# ---------------------------------------------------------------------------
+
+_FAVICON_PATH = Path(__file__).parent / "images" / "phage favicon.png"
+_FAVICON_B64  = (
+    "data:image/png;base64,"
+    + base64.b64encode(_FAVICON_PATH.read_bytes()).decode()
+    if _FAVICON_PATH.exists() else None
+)
 
 # ---------------------------------------------------------------------------
 # Link templates
@@ -770,7 +783,8 @@ def render_html(
         '<meta charset="UTF-8">\n'
         '<meta name="viewport" content="width=device-width,initial-scale=1">\n'
         f"<title>Orpham Synteny Report — {escape(title_str)}</title>\n"
-        f"<style>{_CSS}</style>\n"
+        + (f'<link rel="icon" type="image/png" href="{_FAVICON_B64}">\n' if _FAVICON_B64 else "")
+        + f"<style>{_CSS}</style>\n"
         "</head>\n"
         "<body>\n"
         "<h1>🧬 Orpham Synteny Report</h1>\n"
