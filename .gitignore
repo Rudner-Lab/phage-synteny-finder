@@ -16,3 +16,6 @@ venv/
 
 # macOS
 .DS_Store
+
+# Don't commit output in case this repo is published (cannot re-distribute phamerator data)
+output/
