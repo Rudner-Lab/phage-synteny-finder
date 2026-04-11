@@ -133,6 +133,16 @@ def strip_draft(name: str) -> tuple[str, int]:
     return name, 0
 
 
+def reset_db(path: str) -> None:
+    """Delete the database file so open_db recreates it from scratch."""
+    p = Path(path)
+    for suffix in ("", "-wal", "-shm"):
+        candidate = Path(str(p) + suffix) if suffix else p
+        if candidate.exists():
+            candidate.unlink()
+    print(f"Database reset: {path}")
+
+
 def open_db(path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
@@ -486,6 +496,13 @@ def parse_args() -> argparse.Namespace:
         "--password",
         help="Phamerator login password (overrides PHAMERATOR_PASSWORD env var)",
     )
+    parser.add_argument(
+        "--force", action="store_true",
+        help=(
+            "Drop and recreate the database before scraping. "
+            "Use this when Phamerator has pushed a pham renumbering update."
+        ),
+    )
     return parser.parse_args()
 
 
@@ -530,6 +547,12 @@ def main() -> None:
             f"    -a \"you@example.com\" -s \"{_KEYCHAIN_SERVICE}\" -w\n\n"
             "Then run with just --email and the password will be found automatically."
         )
+
+    if args.force:
+        print("--force: dropping existing database for a full re-scrape.")
+        print("This is required after a Phamerator pham renumbering update.")
+        reset_db(args.output)
+        print()
 
     print(f"Dataset : {args.dataset}")
     print(f"Output  : {args.output}")

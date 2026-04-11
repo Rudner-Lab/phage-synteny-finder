@@ -126,6 +126,7 @@ This writes `output/<cluster>_orpham_report.html` for every cluster. Each report
 | `--password` | Keychain / `PHAMERATOR_PASSWORD` env | Phamerator password |
 | `--delay` | `2.0` | Seconds between requests |
 | `--max-retries` | `3` | Retry attempts per phage |
+| `--force` | off | Drop and recreate the DB before scraping (use after pham updates) |
 
 ### Cluster pattern syntax
 
@@ -205,3 +206,19 @@ The database is populated by `scripts/scrape_phamerator.py`, which fetches phage
 
 - **`phages`** — one row per phage per dataset; includes cluster, subcluster, genome length, and draft status.
 - **`genes`** — one row per gene; includes position, strand, pham assignment, and function annotation.
+
+### Handling Phamerator pham updates
+
+Phamerator periodically renumbers phams in a breaking way: when a pham's membership changes, it receives a new number and the old one disappears. When this happens, all affected pham links in the reports point to 404 pages.
+
+Because this project uses pham IDs as join keys throughout the analysis pipeline, **there is no safe incremental update path.** When you learn that Phamerator has pushed a pham update, do a full re-scrape and re-generate all reports:
+
+```bash
+# 1. Re-scrape from scratch (drops and recreates the database)
+.venv/bin/python scripts/scrape_phamerator.py --force
+
+# 2. Regenerate all cluster reports
+.venv/bin/python scripts/generate_cluster_reports.py
+```
+
+The `--force` flag deletes the existing `phamerator.sqlite` (including WAL files) before scraping. Without it, already-scraped phages are skipped, which is correct for resuming an interrupted scrape but wrong after a pham renumbering.
