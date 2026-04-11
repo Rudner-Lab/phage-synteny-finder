@@ -11,21 +11,21 @@ reconstructable from the genes table:
 
 Usage
 -----
-    .venv/bin/python scrape_phamerator.py --dataset Actino_Draft --output phamerator.sqlite
+    .venv/bin/python scripts/scrape_phamerator.py
+    .venv/bin/python scripts/scrape_phamerator.py --dataset Actino_Draft --output phamerator.sqlite
 
 Credentials are read from environment variables (or a .env file if
-python-dotenv is installed). For better security on macOS, store the password
-in Keychain and pass it to --password at runtime:
+python-dotenv is installed). On macOS the password is also looked up
+automatically from Keychain (service "phamerator_password") if the email
+is known — store it once with:
 
     security add-generic-password -a "you@example.com" -s "phamerator_password" -w
-    .venv/bin/python scrape_phamerator.py \
-      --email "you@example.com" \
-      --password "$(security find-generic-password -a "you@example.com" -s "phamerator_password" -w)"
 
-If you prefer .env, keep only non-sensitive values there:
+Then just run:
 
-    PHAMERATOR_EMAIL=you@example.com
-    PHAMERATOR_PASSWORD=yourpassword
+    .venv/bin/python scripts/scrape_phamerator.py --email "you@example.com"
+
+If PHAMERATOR_EMAIL is set in .env, no flags are needed at all.
 
 Rate-limiting behaviour (all configurable via CLI flags)
 ---------------------------------------------------------
@@ -489,20 +489,46 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+_KEYCHAIN_SERVICE = "phamerator_password"
+
+
+def _keychain_password(email: str) -> str:
+    """Return the Keychain password for *email*, or '' if unavailable/not macOS."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ["security", "find-generic-password", "-a", email, "-s", _KEYCHAIN_SERVICE, "-w"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        pass
+    return ""
+
+
 def main() -> None:
     args = parse_args()
 
-    # Credentials: CLI flag > env var
+    # Credentials: CLI flag > env var > macOS Keychain
     email = args.email or os.environ.get("PHAMERATOR_EMAIL", "")
     password = args.password or os.environ.get("PHAMERATOR_PASSWORD", "")
+
+    if email and not password:
+        kc = _keychain_password(email)
+        if kc:
+            print("Credentials: using password from macOS Keychain.")
+            password = kc
 
     if not email or not password:
         sys.exit(
             "ERROR: Phamerator credentials not found.\n"
-            "Set PHAMERATOR_EMAIL and PHAMERATOR_PASSWORD environment variables,\n"
-            "create a .env file with those keys, or pass --email / --password.\n"
-            "On macOS, prefer storing PHAMERATOR_PASSWORD in Keychain and\n"
-            "passing it to --password at runtime instead of storing plaintext secrets."
+            "Resolution order tried: --password flag, PHAMERATOR_PASSWORD env var,\n"
+            "macOS Keychain (service 'phamerator_password', account = email).\n\n"
+            "To store your password in Keychain (recommended on macOS):\n"
+            "  security add-generic-password \\\n"
+            f"    -a \"you@example.com\" -s \"{_KEYCHAIN_SERVICE}\" -w\n\n"
+            "Then run with just --email and the password will be found automatically."
         )
 
     print(f"Dataset : {args.dataset}")

@@ -39,12 +39,12 @@ Run the setup script from the repo root. It creates the virtual environment, ins
 bash scripts/setup.sh
 ```
 
-The script checks that Python 3.10+ is available, creates the virtual environment, installs dependencies, installs the pre-commit hook, runs the unit tests, and optionally kicks off the data scrape followed by the smoke tests.
+The script checks that Python 3.10+ is available, creates the virtual environment, installs dependencies, installs the pre-commit hook, prompts for your Phamerator email (saving it to `.env`), and on macOS offers to store your password in Keychain — once stored, you only need the email and the password is never written to disk. It then runs the unit tests and optionally kicks off the data scrape followed by the smoke tests.
 
 To download the database separately at any time:
 
 ```bash
-.venv/bin/python scrape_phamerator.py
+.venv/bin/python scripts/scrape_phamerator.py
 ```
 
 ### Manual setup
@@ -116,6 +116,17 @@ This writes `output/<cluster>_orpham_report.html` for every cluster. Each report
 | `--db` | `phamerator.sqlite` | Path to the SQLite database |
 | `--out-dir` | `output` | Directory for output HTML files |
 
+**`scripts/scrape_phamerator.py`**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--dataset` | `Actino_Draft` | Phamerator dataset to scrape |
+| `--output` | `phamerator.sqlite` | Path to the output database |
+| `--email` | `PHAMERATOR_EMAIL` env | Phamerator login email |
+| `--password` | Keychain / `PHAMERATOR_PASSWORD` env | Phamerator password |
+| `--delay` | `2.0` | Seconds between requests |
+| `--max-retries` | `3` | Retry attempts per phage |
+
 ### Cluster pattern syntax
 
 | Pattern | Matches |
@@ -170,7 +181,7 @@ observable_notebooks/
 
 output/                       generated HTML reports (not committed to the repo)
 
-scrape_phamerator.py   scrapes PhagesDB and populates phamerator.sqlite
+scripts/scrape_phamerator.py   scrapes PhagesDB and populates phamerator.sqlite
 schema.sql             database schema for reference
 ```
 
@@ -190,7 +201,7 @@ The smoke tests (`test_smoke.py`) require `phamerator.sqlite` to be present and 
 
 ## Database
 
-The database is populated by `scrape_phamerator.py`, which fetches phage and gene data from PhagesDB. See `schema.sql` for the full table definitions. The two main tables are:
+The database is populated by `scripts/scrape_phamerator.py`, which fetches phage and gene data from PhagesDB. See `schema.sql` for the full table definitions. The two main tables are:
 
 - **`phages`** — one row per phage per dataset; includes cluster, subcluster, genome length, and draft status.
 - **`genes`** — one row per gene; includes position, strand, pham assignment, and function annotation.

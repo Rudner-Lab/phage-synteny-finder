@@ -6,8 +6,9 @@
 #   2. Creates a Python virtual environment (.venv) if one doesn't exist.
 #   3. Installs Python dependencies from requirements.txt.
 #   4. Installs the pre-commit test hook into .git/hooks/.
-#   5. Runs the unit test suite to verify the installation.
-#   6. Optionally runs the Phamerator data scrape to populate phamerator.sqlite,
+#   5. On macOS, optionally stores Phamerator credentials in Keychain.
+#   6. Runs the unit test suite to verify the installation.
+#   7. Optionally runs the Phamerator data scrape to populate phamerator.sqlite,
 #      followed by the smoke tests to verify the result.
 #
 # Usage:
@@ -81,7 +82,64 @@ fi
 echo
 
 # ---------------------------------------------------------------------------
-# 5. Unit tests
+# 5. Credential setup
+# ---------------------------------------------------------------------------
+ENV_FILE=".env"
+phamerator_email=""
+
+# Prompt for email and write to .env if not already present
+existing_email=$(grep -E "^PHAMERATOR_EMAIL=" "$ENV_FILE" 2>/dev/null | cut -d= -f2-)
+if [ -n "$existing_email" ] && [ "$existing_email" != "you@example.com" ]; then
+    echo "Phamerator email already set in .env: $existing_email"
+    phamerator_email="$existing_email"
+else
+    read -r -p "Phamerator email (leave blank to skip): " phamerator_email
+    if [ -n "$phamerator_email" ]; then
+        if [ -f "$ENV_FILE" ]; then
+            # Replace existing placeholder line or append
+            if grep -qE "^PHAMERATOR_EMAIL=" "$ENV_FILE"; then
+                sed -i '' "s|^PHAMERATOR_EMAIL=.*|PHAMERATOR_EMAIL=${phamerator_email}|" "$ENV_FILE"
+            else
+                echo "PHAMERATOR_EMAIL=${phamerator_email}" >> "$ENV_FILE"
+            fi
+        else
+            echo "PHAMERATOR_EMAIL=${phamerator_email}" > "$ENV_FILE"
+        fi
+        echo "  Email saved to $ENV_FILE."
+    else
+        echo "  Skipped — set PHAMERATOR_EMAIL in .env before running the scrape."
+    fi
+fi
+echo
+
+# Store password in macOS Keychain if available
+if [ -n "$phamerator_email" ] && command -v security &>/dev/null; then
+    echo "macOS Keychain is available. Storing your password here means it is"
+    echo "never written to disk — the scrape script reads it automatically."
+    echo
+    read -r -p "Store Phamerator password in Keychain now? [y/N] " cred_answer
+    echo
+    if [[ "$cred_answer" =~ ^[Yy] ]]; then
+        # -w prompts securely (no echo); -U updates if already exists
+        if security add-generic-password -U \
+                -a "$phamerator_email" \
+                -s "phamerator_password" \
+                -w 2>/dev/null; then
+            echo "  Password stored in Keychain (service: phamerator_password)."
+            echo "  To update later: security add-generic-password -U -a \"$phamerator_email\" -s phamerator_password -w"
+        else
+            echo "  WARNING: Could not store password. Try manually:"
+            echo "    security add-generic-password -a \"$phamerator_email\" -s phamerator_password -w"
+        fi
+    else
+        echo "Skipped. To store later:"
+        echo "  security add-generic-password -a \"$phamerator_email\" -s phamerator_password -w"
+    fi
+    echo
+fi
+
+# ---------------------------------------------------------------------------
+# 6. Unit tests
 # ---------------------------------------------------------------------------
 echo "Running unit tests..."
 if .venv/bin/python -m pytest tests/ -q --ignore=tests/test_smoke.py; then
@@ -95,7 +153,7 @@ fi
 echo
 
 # ---------------------------------------------------------------------------
-# 6. Data download (interactive)
+# 7. Data download (interactive)
 # ---------------------------------------------------------------------------
 if [ -f "phamerator.sqlite" ]; then
     echo "Database phamerator.sqlite already exists — skipping scrape."
@@ -112,14 +170,14 @@ else
     case "$answer" in
         [Yy]*)
             echo "Starting scrape. You will be prompted for credentials if not set in .env."
-            .venv/bin/python scrape_phamerator.py
+            .venv/bin/python scripts/scrape_phamerator.py
             echo
             echo "Running smoke tests to verify the database..."
             .venv/bin/python -m pytest tests/test_smoke.py -q && echo "  Smoke tests passed." || echo "  WARNING: Smoke tests failed — some phages may not have been scraped correctly."
             ;;
         *)
             echo "Skipped. Run the following when ready:"
-            echo "  .venv/bin/python scrape_phamerator.py"
+            echo "  .venv/bin/python scripts/scrape_phamerator.py"
             ;;
     esac
 fi
