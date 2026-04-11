@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Run the test suite before every commit.
+# Set SKIP_TESTS=true to bypass (e.g. for WIP commits):
+#   SKIP_TESTS=true git commit -m "..."
+
+if [ "${SKIP_TESTS}" = "true" ]; then
+    echo "pre-commit: SKIP_TESTS=true — skipping test run."
+    exit 0
+fi
+
+echo "pre-commit: running tests..."
+.venv/bin/python -m pytest tests/ -q
+status=$?
+
+if [ $status -ne 0 ]; then
+    echo ""
+    echo "pre-commit: tests failed — commit aborted. Use SKIP_TESTS=true to bypass."
+fi
+
+exit $status
