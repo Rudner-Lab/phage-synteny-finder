@@ -432,6 +432,25 @@ class TestComputePhageResults:
         assert passing == []
         assert summary["total_genes"] == 0
 
+    def test_reverse_strand_orpham_passes(self, db):
+        # Kappa gene 2 is on the reverse strand; flanks are swapped vs array order
+        # (up_idx=2, dn_idx=0). Lambda provides a two-sided hit → should still pass.
+        passing, summary = compute_phage_results(db, "Kappa", DATASET)
+        assert len(passing) == 1
+        result = passing[0]
+        assert result["gene_number"] == "2"
+        assert result["n_two_sided"] == 1
+
+    def test_terminal_orpham_fails_filter(self, db):
+        # Mu gene 1 is the first gene in the genome — no upstream neighbour.
+        # With ref_up_pham=None, up_fns is always empty, so both_fns is empty
+        # regardless of dn-only hits, and the orpham cannot pass the filter.
+        passing, summary = compute_phage_results(db, "Mu", DATASET)
+        assert len(passing) == 0
+        assert summary["with_informative"] == 0
+        # Sanity check: at least one orpham was found (the terminal gene itself)
+        assert summary["total_orphams"] >= 1
+
 
 # ---------------------------------------------------------------------------
 # compute_function_tallies — counting invariants
