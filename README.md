@@ -20,7 +20,10 @@ Due to the restriction on retransmission and publication, the scraped database (
 
 A command-line tool that identifies **orpham genes** in a set of phage genomes and generates a self-contained HTML report summarising their syntenic context.
 
-An **orpham** is a gene whose protein family (pham) exists in only one phage — it has no homologs in the rest of the dataset. This tool asks: *even if the gene itself is unique, does the genomic neighbourhood around it point to a known function?* It does this by scanning other phages in the dataset for the same flanking pham context and tallying the functions of whatever gene sits in the corresponding position.
+An **orpham** is a gene whose protein family (pham) exists in only one phage — it has no homologs in the rest of the dataset. This tool asks: *even if the gene itself is unique, does the genomic neighbourhood around it point to a known function?* It does this by scanning other phages in the dataset for the same flanking pham context and tallying the functions of whatever gene sits in the corresponding position. Orphams with at least one informative function that is corroborated from both sides (whether across one or multiple phages) are included in the report.
+
+![Orpham Synteny Report summary example](orpham_report/images/example_orpham_synteny_report_summary.jpg)
+![Orpham Synteny Report detail example](orpham_report/images/example_orpham_synteny_report_detail.jpg)
 
 ### Observable notebooks (`observable_notebooks/`)
 
