@@ -8,9 +8,12 @@ Phages (dataset "Test"):
   Alpha   cluster A  subcluster A1  → 5 genes, 1 orpham (gene 3)
   Beta    cluster A  subcluster A1  → 5 genes, shares phams with Alpha
   Zeta    cluster A  no subcluster  → 0 genes (tests unsubclustered "A" pattern)
-  Gamma   cluster B  subcluster B   → 4 genes, 1 orpham (gene 2) with informative function
+  Gamma   cluster B  subcluster B   → 4 genes, 1 orpham (gene 3) with informative function
   Delta   cluster B  subcluster B   → 4 genes (pham neighbours of Gamma's orpham)
   Epsilon cluster C  no subcluster  → 0 genes, is_draft=1
+  Iota    cluster D  subcluster D1  → 3 genes, 1 orpham (gene 2) — chimeric evidence only
+  Eta     cluster D  subcluster D1  → 3 genes (up-only candidate for Iota's orpham)
+  Theta   cluster D  subcluster D1  → 3 genes (dn-only candidate for Iota's orpham)
 
 Pham membership summary:
   pham_shared_up   – in Alpha genes[1], Beta genes[1]         (non-orpham)
@@ -21,14 +24,25 @@ Pham membership summary:
   pham_orpham_B    – only in Gamma genes[2]                   (orpham)
   pham_b_candidate – in Delta genes[2]; function = "lysin A"  (informative hit)
   pham_solo        – only in Gamma genes[0]; no neighbors → no hits
+  pham_conv_up     – in Iota genes[0], Eta genes[0]           (non-orpham)
+  pham_conv_dn     – in Iota genes[2], Theta genes[2]         (non-orpham)
+  pham_orpham_C    – only in Iota genes[1]                    (orpham)
+  pham_eta_mid     – only in Eta genes[1]; function="lysin B" (up-only hit for Iota)
+  pham_theta_mid   – only in Theta genes[1]; function="lysin B" (dn-only hit for Iota)
 
 Alpha gene 3 (pham_orpham_A): flanked by pham_shared_up / pham_shared_dn.
-  Beta has the same flanking context around gene 3, but its gene 2 is pham_b_candidate
-  (function "NKF") → Alpha's orpham will NOT pass the filter.
+  Beta has the same flanking context but its central gene is NKF
+  → Alpha's orpham will NOT pass the filter.
 
 Gamma gene 3 (pham_orpham_B): flanked by pham_b_up / pham_b_dn.
-  Delta carries both flanking phams; its central gene has pham_b_candidate / function "lysin A"
-  → Gamma's orpham WILL pass the filter (two-sided hit with informative function).
+  Delta carries both flanking phams; central gene = "lysin A"
+  → Gamma's orpham WILL pass (two-sided hit).
+
+Iota gene 2 (pham_orpham_C): flanked by pham_conv_up / pham_conv_dn.
+  Eta has pham_conv_up → up-only hit with "lysin B".
+  Theta has pham_conv_dn → dn-only hit with "lysin B".
+  No phage has both flanks → zero two-sided hits, but "lysin B" is in both_fns
+  (convergent / chimeric evidence) → Iota's orpham WILL pass the filter.
 """
 import sqlite3
 
@@ -77,6 +91,9 @@ PHAGES = [
     _phage("Gamma",   "B", "",  "B"),
     _phage("Delta",   "B", "",  "B"),
     _phage("Epsilon", "C", "",  "C", is_draft=1),  # draft phage, no genes → empty result
+    _phage("Iota",    "D", "1", "D1"),  # orpham with chimeric evidence only
+    _phage("Eta",     "D", "1", "D1"),  # up-only candidate for Iota's orpham
+    _phage("Theta",   "D", "1", "D1"),  # dn-only candidate for Iota's orpham
 ]
 
 # Alpha: genes 1-5, gene 3 is orpham flanked by shared_up (gene 2) and shared_dn (gene 4)
@@ -114,7 +131,28 @@ DELTA_GENES = [
     _gene("D_4", "Delta", 4, 1600, 2000, "pham_edge"),
 ]
 
-ALL_GENES = ALPHA_GENES + BETA_GENES + GAMMA_GENES + DELTA_GENES
+# Iota: orpham flanked by pham_conv_up / pham_conv_dn
+IOTA_GENES = [
+    _gene("I_1", "Iota", 1,  100,  500, "pham_conv_up"),
+    _gene("I_2", "Iota", 2,  600, 1000, "pham_orpham_C"),        # orpham
+    _gene("I_3", "Iota", 3, 1100, 1500, "pham_conv_dn"),
+]
+
+# Eta: has pham_conv_up → up-only hit for Iota's orpham (function "lysin B")
+ETA_GENES = [
+    _gene("E_1", "Eta", 1,  100,  500, "pham_conv_up"),
+    _gene("E_2", "Eta", 2,  600, 1000, "pham_eta_mid", "lysin B"),
+    _gene("E_3", "Eta", 3, 1100, 1500, "pham_eta_other"),
+]
+
+# Theta: has pham_conv_dn → dn-only hit for Iota's orpham (function "lysin B")
+THETA_GENES = [
+    _gene("T_1", "Theta", 1,  100,  500, "pham_theta_other"),
+    _gene("T_2", "Theta", 2,  600, 1000, "pham_theta_mid", "lysin B"),
+    _gene("T_3", "Theta", 3, 1100, 1500, "pham_conv_dn"),
+]
+
+ALL_GENES = ALPHA_GENES + BETA_GENES + GAMMA_GENES + DELTA_GENES + IOTA_GENES + ETA_GENES + THETA_GENES
 
 
 @pytest.fixture

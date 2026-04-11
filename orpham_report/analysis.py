@@ -375,20 +375,15 @@ def compute_one_flank_tallies(
 # ---------------------------------------------------------------------------
 
 
-def passes_filter(both_fns: set[str], one_fns: list[tuple[str, dict]]) -> bool:
+def passes_filter(both_fns: set[str]) -> bool:
     """True if the orpham has at least one informative cross-flank function.
 
-    Passes if:
-    - any informative function appears in *both_fns* (two-flank support), OR
-    - any informative function is seen in both the up-only and dn-only subsets
-      of one-flank hits (convergent one-flank support).
+    ``both_fns`` is the intersection of all up-matched and all dn-matched
+    gene functions — including one-sided hits — so a function that appears on
+    both flanks across *different* phages (convergent one-sided evidence)
+    also qualifies.
     """
-    if any(is_informative(fn) for fn in both_fns):
-        return True
-    return any(
-        is_informative(fn) and counts["up"] > 0 and counts["dn"] > 0
-        for fn, counts in one_fns
-    )
+    return any(is_informative(fn) for fn in both_fns)
 
 
 # ---------------------------------------------------------------------------
@@ -426,7 +421,7 @@ def assemble_orpham_result(
         "one_fns_sorted": one_fns_sorted,
         "up_only_count": up_only_count,
         "dn_only_count": dn_only_count,
-        "passes_filter": passes_filter(both_fns, one_fns_sorted),
+        "passes_filter": passes_filter(both_fns),
         "n_two_sided": sum(1 for r in hits if r["two_sided"]),
         "n_one_sided": sum(1 for r in hits if not r["two_sided"]),
     }

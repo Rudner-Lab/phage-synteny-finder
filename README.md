@@ -39,6 +39,8 @@ Run the setup script from the repo root. It creates the virtual environment, ins
 bash scripts/setup.sh
 ```
 
+The script checks that Python 3.10+ is available, creates the virtual environment, installs dependencies, installs the pre-commit hook, runs the unit tests, and optionally kicks off the data scrape followed by the smoke tests.
+
 To download the database separately at any time:
 
 ```bash
@@ -46,6 +48,8 @@ To download the database separately at any time:
 ```
 
 ### Manual setup
+
+**Requirements:** Python 3.10 or newer.
 
 ```bash
 python3 -m venv .venv
@@ -96,12 +100,21 @@ This writes `output/<cluster>_orpham_report.html` for every cluster. Each report
 
 ### Options
 
+**`scripts/report_orpham_synteny.py`**
+
 | Flag | Default | Description |
 |---|---|---|
 | `--dataset` | `Actino_Draft` | Dataset name in the database |
 | `--db` | `phamerator.sqlite` | Path to the SQLite database |
-| `--out` | `output/<pattern>_orpham_report.html` | Output HTML file (single-report script only) |
-| `--out-dir` | `output` | Output directory (bulk script only) |
+| `--out` | `output/<pattern>_orpham_report.html` | Output HTML file |
+
+**`scripts/generate_cluster_reports.py`**
+
+| Flag | Default | Description |
+|---|---|---|
+| `--dataset` | `Actino_Draft` | Dataset name in the database |
+| `--db` | `phamerator.sqlite` | Path to the SQLite database |
+| `--out-dir` | `output` | Directory for output HTML files |
 
 ### Cluster pattern syntax
 

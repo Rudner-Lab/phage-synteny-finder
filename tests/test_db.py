@@ -61,7 +61,7 @@ class TestResolveClusterPhages:
 
     def test_all(self, db):
         rows = resolve_cluster_phages(db, ["all"], DATASET)
-        assert self._ids(rows) == {"Alpha", "Beta", "Zeta", "Gamma", "Delta", "Epsilon"}
+        assert self._ids(rows) == {"Alpha", "Beta", "Zeta", "Gamma", "Delta", "Epsilon", "Iota", "Eta", "Theta"}
 
     def test_exact_subcluster(self, db):
         # "A1" matches cluster_subcluster = "A1" exactly

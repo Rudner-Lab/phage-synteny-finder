@@ -375,23 +375,25 @@ class TestComputeOneFlankTallies:
 
 
 class TestPassesFilter:
-    def test_informative_two_flank_passes(self):
-        assert passes_filter({"lysin A"}, [])
+    def test_informative_passes(self):
+        assert passes_filter({"lysin A"})
 
-    def test_uninformative_two_flank_fails(self):
-        assert not passes_filter({"nkf"}, [])
+    def test_uninformative_fails(self):
+        assert not passes_filter({"nkf"})
 
-    def test_informative_convergent_one_flank_passes(self):
-        one_fns = [("lysin A", {"up": 1, "dn": 1})]
-        assert passes_filter(set(), one_fns)
+    def test_empty_fails(self):
+        assert not passes_filter(set())
 
-    def test_informative_one_sided_only_fails(self):
-        # informative but only on one flank
-        one_fns = [("lysin A", {"up": 1, "dn": 0})]
-        assert not passes_filter(set(), one_fns)
-
-    def test_empty_everything_fails(self):
-        assert not passes_filter(set(), [])
+    def test_chimeric_evidence_passes(self, db):
+        # Iota's orpham has no two-sided hits; "lysin B" appears on both flanks
+        # only through separate one-sided hits (Eta up-only, Theta dn-only).
+        # passes_filter must still return True via both_fns.
+        passing, summary = compute_phage_results(db, "Iota", DATASET)
+        assert len(passing) == 1
+        result = passing[0]
+        assert result["n_two_sided"] == 0
+        assert result["n_one_sided"] == 2
+        assert "lysin B" in result["both_fns"]
 
 
 # ---------------------------------------------------------------------------

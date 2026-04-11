@@ -236,6 +236,9 @@ a { color: #2563eb; text-decoration: none; }
 a:hover { text-decoration: underline; }
 .draft-flag { font-size: 0.75em; color: #64748b; }
 
+/* ── Corroborated function row (appears on both flanks, real or chimeric) ── */
+.tr-corroborated td { background: #f0fdf4; }
+
 /* ── Sortable tables ── */
 th { cursor: pointer; user-select: none; }
 th[data-sort="asc"]::after  { content: ' ▲'; font-size: 0.75em; opacity: 0.7; }
@@ -312,7 +315,7 @@ def _gene_tag(phage_id: str, gene_number: str) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _render_tally_table(tally_sorted: list, one_fns_sorted: list) -> str:
+def _render_tally_table(tally_sorted: list, one_fns_sorted: list, both_fns: set) -> str:
     """Compact table of hit counts broken down by two-sided / ↑ only / ↓ only."""
     two_dict = dict(tally_sorted)
     one_dict = dict(one_fns_sorted)
@@ -340,9 +343,10 @@ def _render_tally_table(tally_sorted: list, one_fns_sorted: list) -> str:
         two  = two_dict.get(fn, 0)
         up   = one_dict.get(fn, {}).get("up", 0)
         dn   = one_dict.get(fn, {}).get("dn", 0)
-        fn_cls = ' class="tally-fn-strong"' if inf else ' class="fn-dim"'
+        fn_cls  = ' class="tally-fn-strong"' if inf else ' class="fn-dim"'
+        row_cls = ' class="tr-corroborated"' if (inf and fn in both_fns) else ""
         rows_html += (
-            f"<tr>"
+            f"<tr{row_cls}>"
             f"<td{fn_cls}>{escape(fn_display(fn))}</td>"
             f'<td class="td-right">{_n(two, col_two)}</td>'
             f'<td class="td-right">{_n(up, col_up)}</td>'
@@ -493,7 +497,7 @@ def _render_orpham_card(o: dict, phage_id: str) -> str:
     )
     body = (
         f'<div class="card-body">'
-        f'{_render_tally_table(o["tally_sorted"], o["one_fns_sorted"])}'
+        f'{_render_tally_table(o["tally_sorted"], o["one_fns_sorted"], o["both_fns"])}'
         f'{_render_hits_table(o["hits"])}'
         f'</div>'
     )
