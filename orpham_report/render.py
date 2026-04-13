@@ -9,7 +9,9 @@ Public entry point: ``render_html(phage_results, dataset, patterns)``
 from __future__ import annotations
 
 import base64
+import csv
 import html as _html
+import io
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -763,6 +765,63 @@ def _render_overall_summary(cluster_data: dict[str, list[tuple[str, str, list, d
 # ---------------------------------------------------------------------------
 # Public entry point
 # ---------------------------------------------------------------------------
+
+
+_CSV_FIELDS = [
+    "phage_id", "cluster", "subcluster", "is_draft",
+    "gene_number", "pham_name", "direction", "start", "stop", "gene_length",
+    "ref_up_pham", "ref_dn_pham", "ref_up_func", "ref_dn_func",
+    "n_two_flank", "n_one_flank",
+    "assigned_function", "synteny_suggested_function", "syntenic_functions",
+]
+
+
+def render_csv(
+    phage_results: list[tuple[str, str, str, list[dict], dict]],
+    phage_is_draft: dict[str, bool] | None = None,
+) -> str:
+    """Return CSV text with one row per passing orpham gene across all phages.
+
+    Columns
+    -------
+    phage_id, cluster, subcluster, is_draft
+    gene_number, pham_name, direction, start, stop, gene_length
+    ref_up_pham, ref_dn_pham, ref_up_func, ref_dn_func
+    n_two_flank, n_one_flank
+    assigned_function         — gene's own phamerator annotation (blank if NKF/hypothetical)
+    synteny_suggested_function — top-ranked informative function from the synteny analysis
+    syntenic_functions        — pipe-separated set of all corroborating functions (both_fns)
+    """
+    _is_draft = phage_is_draft or {}
+    buf = io.StringIO()
+    writer = csv.DictWriter(buf, fieldnames=_CSV_FIELDS, lineterminator="\n")
+    writer.writeheader()
+    for phage_id, cluster, cs, orpham_results, _ in phage_results:
+        for o in orpham_results:
+            assigned = o.get("gene_function", "")
+            both_sorted = sorted(o["both_fns"])
+            writer.writerow({
+                "phage_id":                   phage_id,
+                "cluster":                    cluster,
+                "subcluster":                 cs,
+                "is_draft":                   int(_is_draft.get(phage_id, False)),
+                "gene_number":                o["gene_number"],
+                "pham_name":                  o["pham_name"],
+                "direction":                  o["direction"],
+                "start":                      o["start"] if o["start"] is not None else "",
+                "stop":                       o["stop"]  if o["stop"]  is not None else "",
+                "gene_length":                o["gene_length"],
+                "ref_up_pham":                o["ref_up_pham"] or "",
+                "ref_dn_pham":                o["ref_dn_pham"] or "",
+                "ref_up_func":                fn_display(o["ref_up_func"]) if o["ref_up_func"] else "",
+                "ref_dn_func":                fn_display(o["ref_dn_func"]) if o["ref_dn_func"] else "",
+                "n_two_flank":                o["n_two_sided"],
+                "n_one_flank":                o["n_one_sided"],
+                "assigned_function":          fn_display(assigned) if is_informative(assigned) else "",
+                "synteny_suggested_function": _top_fn(o),
+                "syntenic_functions":         "|".join(fn_display(f) for f in both_sorted),
+            })
+    return buf.getvalue()
 
 
 def render_html(

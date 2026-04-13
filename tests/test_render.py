@@ -1,10 +1,12 @@
 """Smoke tests for orpham_report.render."""
+import csv
+import io
 import pytest
 from tests.conftest import DATASET
 
 from orpham_report.analysis import compute_phage_results
 from orpham_report.db import resolve_cluster_phages
-from orpham_report.render import render_html, escape
+from orpham_report.render import render_html, render_csv, escape
 
 
 # ---------------------------------------------------------------------------
@@ -174,3 +176,83 @@ class TestRenderHtml:
         html = render_html(results, DATASET, ["D1"], phage_is_draft=phage_is_draft)
         assert 'id="phage-Iota"' in html
         assert "lysin B" in html
+
+
+# ---------------------------------------------------------------------------
+# render_csv tests
+# ---------------------------------------------------------------------------
+
+
+def _parse_csv(text: str) -> list[dict]:
+    return list(csv.DictReader(io.StringIO(text)))
+
+
+class TestRenderCsv:
+    EXPECTED_FIELDS = {
+        "phage_id", "cluster", "subcluster", "is_draft",
+        "gene_number", "pham_name", "direction", "start", "stop", "gene_length",
+        "ref_up_pham", "ref_dn_pham", "ref_up_func", "ref_dn_func",
+        "n_two_flank", "n_one_flank",
+        "assigned_function", "synteny_suggested_function", "syntenic_functions",
+    }
+
+    def test_returns_string(self, db):
+        results, phage_is_draft = _build_results(db, ["all"])
+        out = render_csv(results, phage_is_draft)
+        assert isinstance(out, str)
+
+    def test_header_fields(self, db):
+        results, phage_is_draft = _build_results(db, ["all"])
+        rows = _parse_csv(render_csv(results, phage_is_draft))
+        assert rows, "CSV should have at least one data row"
+        assert set(rows[0].keys()) == self.EXPECTED_FIELDS
+
+    def test_one_row_per_passing_orpham(self, db):
+        # Gamma cluster B has one passing orpham (gene 3, lysin A two-flank hit)
+        results, phage_is_draft = _build_results(db, ["B"])
+        rows = _parse_csv(render_csv(results, phage_is_draft))
+        phage_ids = [r["phage_id"] for r in rows]
+        assert "Gamma" in phage_ids
+
+    def test_is_draft_flag(self, db):
+        # Kappa is in cluster E1 and is_draft=1
+        results, phage_is_draft = _build_results(db, ["E1"])
+        rows = _parse_csv(render_csv(results, phage_is_draft))
+        kappa_rows = [r for r in rows if r["phage_id"] == "Kappa"]
+        assert kappa_rows, "Kappa should appear in E1 CSV"
+        assert kappa_rows[0]["is_draft"] == "1"
+
+    def test_synteny_suggested_function_populated(self, db):
+        # Gamma's orpham has "lysin A" as the top two-flank function
+        results, phage_is_draft = _build_results(db, ["B"])
+        rows = _parse_csv(render_csv(results, phage_is_draft))
+        gamma_rows = [r for r in rows if r["phage_id"] == "Gamma"]
+        assert gamma_rows
+        assert gamma_rows[0]["synteny_suggested_function"] == "lysin A"
+
+    def test_syntenic_functions_pipe_separated(self, db):
+        # Iota's orpham has chimeric evidence: both_fns contains "lysin B"
+        results, phage_is_draft = _build_results(db, ["D1"])
+        rows = _parse_csv(render_csv(results, phage_is_draft))
+        iota_rows = [r for r in rows if r["phage_id"] == "Iota"]
+        assert iota_rows
+        # syntenic_functions should be non-empty and not contain HTML
+        sf = iota_rows[0]["syntenic_functions"]
+        assert "lysin B" in sf
+        assert "<" not in sf
+
+    def test_gene_function_html_escaped_in_csv(self, db):
+        # Lambda's candidate gene has fn="terminase & lysin" — CSV should use raw &, not &amp;
+        results, phage_is_draft = _build_results(db, ["E1"])
+        rows = _parse_csv(render_csv(results, phage_is_draft))
+        kappa_rows = [r for r in rows if r["phage_id"] == "Kappa"]
+        assert kappa_rows
+        sf = kappa_rows[0]["syntenic_functions"]
+        assert "&amp;" not in sf  # CSV must not contain HTML entities
+        assert "terminase" in sf or "lysin" in sf
+
+    def test_no_html_in_csv(self, db):
+        results, phage_is_draft = _build_results(db, ["all"])
+        text = render_csv(results, phage_is_draft)
+        assert "<" not in text
+        assert ">" not in text

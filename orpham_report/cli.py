@@ -29,7 +29,7 @@ from pathlib import Path
 
 from .analysis import compute_cluster_results, compute_phage_results
 from .db import open_db, resolve_cluster_phages, resolve_phage_id
-from .render import render_html
+from .render import render_csv, render_html
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
@@ -60,9 +60,23 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--db",      default="phamerator.sqlite", help="SQLite database path")
     parser.add_argument(
         "--out", default=None,
-        help="Output HTML file (default: <pattern>_orpham_report.html)",
+        help="Output file path (default: output/<pattern>_orpham_report.<ext>). "
+             "Extension is used to infer format when --format is omitted.",
+    )
+    parser.add_argument(
+        "--format", choices=["html", "csv"], default=None,
+        help="Output format. Inferred from --out extension if omitted (default: html).",
     )
     return parser.parse_args(argv)
+
+
+def _resolve_format(args) -> str:
+    """Return 'csv' or 'html', honouring explicit --format then --out extension."""
+    if args.format:
+        return args.format
+    if args.out and args.out.lower().endswith(".csv"):
+        return "csv"
+    return "html"
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -83,6 +97,7 @@ def main(argv: list[str] | None = None) -> None:
 
 
 def _run_single_phage(conn, args) -> None:
+    fmt = _resolve_format(args)
     phage_id = resolve_phage_id(conn, args.phage, args.dataset)
     if phage_id is None:
         sys.exit(
@@ -90,11 +105,12 @@ def _run_single_phage(conn, args) -> None:
         )
 
     out_path = Path(
-        args.out or f"output/{phage_id}_orpham_report.html"
+        args.out or f"output/{phage_id}_orpham_report.{fmt}"
     ).expanduser().resolve()
 
     print(f"Dataset : {args.dataset}")
     print(f"Phage   : {phage_id}")
+    print(f"Format  : {fmt}")
     print(f"Output  : {out_path}")
     print()
 
@@ -111,22 +127,24 @@ def _run_single_phage(conn, args) -> None:
     cs       = row["cluster_subcluster"] if row else ""
     is_draft = bool(row["is_draft"]) if row else False
 
+    phage_results = [(phage_id, cluster, cs, orpham_results, summary)]
+    phage_is_draft = {phage_id: is_draft}
     print()
-    html = render_html(
-        [(phage_id, cluster, cs, orpham_results, summary)],
-        args.dataset,
-        [phage_id],
-        phage_is_draft={phage_id: is_draft},
-    )
-    out_path.write_text(html, encoding="utf-8")
+    if fmt == "csv":
+        content = render_csv(phage_results, phage_is_draft)
+    else:
+        content = render_html(phage_results, args.dataset, [phage_id], phage_is_draft)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(content, encoding="utf-8")
     print(f"Report written to: {out_path}")
 
 
 def _run_cluster(conn, args) -> None:
+    fmt = _resolve_format(args)
     patterns = args.cluster
     out_stem = "_".join(patterns).replace("*", "x").replace(" ", "_")
     out_path = Path(
-        args.out or f"output/{out_stem}_orpham_report.html"
+        args.out or f"output/{out_stem}_orpham_report.{fmt}"
     ).expanduser().resolve()
 
     phage_rows = resolve_cluster_phages(conn, patterns, args.dataset)
@@ -140,6 +158,7 @@ def _run_cluster(conn, args) -> None:
     print(f"Dataset  : {args.dataset}")
     print(f"Patterns : {', '.join(patterns)}")
     print(f"Phages   : {len(phage_rows)}")
+    print(f"Format   : {fmt}")
     print(f"Output   : {out_path}")
     print()
 
@@ -167,6 +186,10 @@ def _run_cluster(conn, args) -> None:
     )
 
     print()
-    html = render_html(phage_results, args.dataset, patterns, phage_is_draft=phage_is_draft)
-    out_path.write_text(html, encoding="utf-8")
+    if fmt == "csv":
+        content = render_csv(phage_results, phage_is_draft)
+    else:
+        content = render_html(phage_results, args.dataset, patterns, phage_is_draft=phage_is_draft)
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(content, encoding="utf-8")
     print(f"Report written to: {out_path}")

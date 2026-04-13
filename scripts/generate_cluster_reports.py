@@ -2,8 +2,9 @@
 """
 generate_cluster_reports.py
 ---------------------------
-Generates one HTML orpham-synteny report per cluster in the dataset,
-saving each to the output directory.
+Generates one HTML orpham-synteny report per cluster in the dataset, saving
+each to the output directory.  It also always writes a combined CSV of every
+passing orpham across all clusters (``all_orpham_report.csv``).
 
 For each cluster, the pattern ``<cluster>*`` is used so that all phages
 in the cluster — across every subcluster and unsubclustered — are included
@@ -30,11 +31,11 @@ from orpham_report.cli import main as report_main
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Generate one orpham synteny report per cluster.",
+        description="Generate one HTML orpham synteny report per cluster, plus a combined CSV.",
     )
     parser.add_argument("--dataset", default="Actino_Draft", help="Dataset name in the database")
     parser.add_argument("--db",      default="phamerator.sqlite", help="Path to the SQLite database")
-    parser.add_argument("--out-dir", default="output", help="Directory for output HTML files")
+    parser.add_argument("--out-dir", default="output", help="Directory for output files")
     return parser.parse_args(argv)
 
 
@@ -86,11 +87,27 @@ def main(argv: list[str] | None = None) -> None:
             failed.append(cluster)
         print()
 
+    # Always produce a combined CSV of every passing orpham across all clusters.
+    all_csv = out_dir / "all_orpham_report.csv"
+    print(f"Combined CSV → {all_csv.name}")
+    try:
+        report_main([
+            "--cluster", "all",
+            "--dataset", args.dataset,
+            "--db",      str(db_path),
+            "--format",  "csv",
+            "--out",     str(all_csv),
+        ])
+    except SystemExit as e:
+        print(f"  WARNING: combined CSV failed — {e}")
+        failed.append("all (CSV)")
+    print()
+
     if failed:
         print(f"Finished with {len(failed)} failure(s): {', '.join(failed)}")
         sys.exit(1)
     else:
-        print(f"All {len(clusters)} cluster reports written to {out_dir}/")
+        print(f"All {len(clusters)} cluster reports + combined CSV written to {out_dir}/")
 
 
 if __name__ == "__main__":

@@ -85,11 +85,15 @@ chmod +x .git/hooks/pre-commit
 .venv/bin/python scripts/report_orpham_synteny.py --phage LordVader
 ```
 
-Output is written to `output/` by default as a self-contained HTML file. Use `--out` to override:
+Output is written to `output/` by default as a self-contained HTML file. Use `--out` to override the path, or `--format csv` to export a spreadsheet instead:
 
 ```bash
 .venv/bin/python scripts/report_orpham_synteny.py --cluster F1 --out report.html
+.venv/bin/python scripts/report_orpham_synteny.py --cluster F1 --format csv
+.venv/bin/python scripts/report_orpham_synteny.py --cluster F1 --out results.csv  # format inferred
 ```
+
+The CSV contains one row per passing orpham gene with columns: phage metadata, gene coordinates, flanking phams, evidence counts, assigned function (from Phamerator), synteny-suggested function, and the full set of syntenic functions.
 
 ### Bulk cluster reports
 
@@ -99,7 +103,7 @@ Generate one report per cluster across the entire dataset:
 .venv/bin/python scripts/generate_cluster_reports.py
 ```
 
-This writes `output/<cluster>_orpham_report.html` for every cluster. Each report uses the `<cluster>*` pattern, so all phages in the cluster — across every subcluster and unsubclustered — are included.
+This writes `output/<cluster>_orpham_report.html` for every cluster and also produces a combined `output/all_orpham_report.csv` (every passing orpham across all clusters in one spreadsheet). Each HTML report uses the `<cluster>*` pattern, so all phages in the cluster — across every subcluster and unsubclustered — are included.
 
 ### Options
 
@@ -109,7 +113,8 @@ This writes `output/<cluster>_orpham_report.html` for every cluster. Each report
 |---|---|---|
 | `--dataset` | `Actino_Draft` | Dataset name in the database |
 | `--db` | `phamerator.sqlite` | Path to the SQLite database |
-| `--out` | `output/<pattern>_orpham_report.html` | Output HTML file |
+| `--format` | `html` (inferred from `--out` extension if given) | Output format: `html` or `csv` |
+| `--out` | `output/<pattern>_orpham_report.<ext>` | Output file path |
 
 **`scripts/generate_cluster_reports.py`**
 
@@ -117,7 +122,7 @@ This writes `output/<cluster>_orpham_report.html` for every cluster. Each report
 |---|---|---|
 | `--dataset` | `Actino_Draft` | Dataset name in the database |
 | `--db` | `phamerator.sqlite` | Path to the SQLite database |
-| `--out-dir` | `output` | Directory for output HTML files |
+| `--out-dir` | `output` | Directory for output files |
 
 **`scripts/scrape_phamerator.py`**
 

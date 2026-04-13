@@ -188,7 +188,7 @@ def _make_minimal_db(path: Path) -> None:
 
 class TestGenerateClusterReports:
     def test_main_produces_html_for_cluster(self, tmp_path):
-        """main() enumerates clusters, calls report per cluster, writes named HTML."""
+        """main() enumerates clusters, writes per-cluster HTML and a combined CSV."""
         db = tmp_path / "mini.sqlite"
         _make_minimal_db(db)
         out_dir = tmp_path / "out"
@@ -196,12 +196,18 @@ class TestGenerateClusterReports:
         from scripts.generate_cluster_reports import main as gcr_main
         gcr_main(["--db", str(db), "--out-dir", str(out_dir), "--dataset", "Test"])
 
+        # Per-cluster HTML (one cluster "A")
         html_files = list(out_dir.glob("*_orpham_report.html"))
         assert len(html_files) == 1, f"Expected 1 HTML file, got {html_files}"
-        content = html_files[0].read_text()
-        assert "<!DOCTYPE html>" in content
-        # File should be named after the cluster
         assert html_files[0].name == "A_orpham_report.html"
+        assert "<!DOCTYPE html>" in html_files[0].read_text()
+
+        # Combined CSV always produced
+        all_csv = out_dir / "all_orpham_report.csv"
+        assert all_csv.exists(), "all_orpham_report.csv was not written"
+        content = all_csv.read_text()
+        assert "phage_id" in content  # header present
+        assert "<" not in content     # no HTML entities in CSV
 
     def test_main_missing_db_exits(self, tmp_path):
         """main() exits non-zero when the database file is absent."""
