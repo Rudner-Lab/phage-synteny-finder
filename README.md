@@ -151,7 +151,7 @@ For each phage in the requested set, the pipeline:
 3. Records the upstream and downstream flanking pham for each orpham.
 4. Finds all other phages in the dataset that carry either flanking pham (candidate phages).
 5. Scans each candidate for a gene sitting between those same two flanking phams.
-6. Tallies the functions annotated on those candidate genes, split by whether both flanks matched (two-sided hit) or only one (one-sided hit).
+6. Tallies the functions annotated on those candidate genes, split by whether both flanks matched (two-flank hit) or only one (one-flank hit).
 7. Filters to orphams that have at least one **informative** function — not "hypothetical protein" or NKF — appearing on both flanks.
 
 Results are rendered into a single HTML file with collapsible sections per phage and gene, a summary table, a TOC, and links to PhagesDB.

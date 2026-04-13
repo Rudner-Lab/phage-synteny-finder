@@ -810,8 +810,8 @@ def render_html(
         "are identified, and all other phages carrying those phams are scanned for a gene at the "
         "equivalent syntenic position. The function of that neighboring gene is used as a proxy "
         "for what the orpham might encode. Hits where <strong>both flanks match</strong> "
-        "(two-sided) are stronger evidence; hits where <strong>one flank matches</strong> "
-        "(one-sided) are also reported. Only orphams with at least one informative "
+        "(two-flank) are stronger evidence; hits where <strong>one flank matches</strong> "
+        "(one-flank) are also reported. Only orphams with at least one informative "
         "(non-NKF/hypothetical) function assignment are shown."
         "</p>"
     )
