@@ -12,25 +12,20 @@ Enter a phage name and select a gene. This tool queries [Phamerator](https://pha
 - **Gene length statistics** — pham-wide and cluster-specific distributions (mean, mode, SD), with context on how typical your gene's length is.
 - **Suggested annotation statement** — auto-generated from neighbour gene functions, ready to copy.
 
-## Step 1: Log in to phamerator
+## Step 1: Connect to Phamerator
 ```
 
 ## ── CELL 2: Phamerator imports ─────────────────────────────────────────────
 ```js
-import {
-  terms,
-  user,
-  formWithSubmit,
-  styles
-} with { formData } from "@scresawn/phamerator-api-utilities"
+import { terms } from "@scresawn/phamerator-api-utilities"
 ```
 
 ## ── CELL 3: Abortable Phamerator API func ──────────────────────────────────
 ```js
-getPhameratorData = (dataset, endpoint, email, password, signal) => {
+getPhameratorData = (dataset, endpoint, apiKey, signal) => {
   return d3.json(`https://phamerator.org/api/${dataset}${endpoint}`, {
     headers: new Headers({
-      Authorization: `Basic ${btoa(`${email}:${password}`)}`
+      Authorization: `Bearer ${apiKey}`
     }),
     signal
   });
@@ -46,34 +41,73 @@ terms
 ## ── CELL 5: Phamerator login ───────────────────────────────────────────────
 ```js
 viewof formData = {
-  let formData = "Signed In";
-  formData = formWithSubmit(html`
-  <form id="login-form" class="login-form">
-  <h4>Phamerator.org Login</h4>
-    <div class="flex-input">
-      <label for="email">Email</label>
-      <input name="email" type="email" value="">
+  const card = html`<div style="
+    border:1px solid #e2e8f0; border-radius:8px;
+    padding:16px 20px; max-width:460px;
+    background:#f8fafc; font-family:system-ui,sans-serif;
+  ">
+    <p style="margin:0 0 12px;font-weight:600;font-size:0.95em;color:#1e293b">
+      🔑 Phamerator API Key
+    </p>
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <input name="apiKey" type="password"
+        placeholder="Paste your API key here"
+        style="flex:1;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;
+               font-size:0.9em;font-family:monospace;color:#1e293b">
+      <button type="button" id="connect-btn" style="
+        padding:6px 16px; background:#1e40af; color:#fff;
+        border:none; border-radius:6px; font-size:0.9em;
+        cursor:pointer; white-space:nowrap;
+      ">Connect</button>
     </div>
-    <div class="flex-input">
-      <label for="password">Password</label>
-      <input name="password" type="password" value="">
-    </div>
-    <div><input name="submit" type="submit" value="LOGIN"></div>
-  </form>
-`);
-  return formData;
+    <p style="margin:0 0 8px;font-size:0.8em;color:#64748b;line-height:1.5">
+      To get your key: log in at <a href="https://phamerator.org" target="_blank" style="color:#1e40af">phamerator.org</a>,
+      click your name in the top-right corner, then find <strong>API Access</strong> and click <strong>Generate new API key</strong>.
+      <strong>Save it to a password manager immediately</strong> — Phamerator cannot show it again,
+      and you will need to generate a new one if you lose it.
+    </p>
+    <div id="login-status" style="font-size:0.82em;color:#64748b;min-height:1.1em"></div>
+  </div>`;
+
+  card.value = null;
+
+  const btn    = card.querySelector("#connect-btn");
+  const input  = card.querySelector("[name=apiKey]");
+  const status = card.querySelector("#login-status");
+
+  btn.addEventListener("click", async () => {
+    const apiKey = input.value.trim();
+    if (!apiKey) { status.textContent = "Please enter an API key."; return; }
+    status.textContent = "Connecting…";
+    btn.disabled = true;
+    try {
+      const profile = await d3.json("https://phamerator.org/api/profile", {
+        headers: new Headers({ Authorization: `Bearer ${apiKey}` })
+      });
+      card.value = { apiKey, datasets: profile.datasets ?? [] };
+      card.dispatchEvent(new CustomEvent("input"));
+      card.innerHTML = `<p style="margin:0;font-size:0.85em;color:#475569;font-family:system-ui,sans-serif">
+        <span style="color:#16a34a">✓</span> Connected as <strong>${profile.username ?? profile.email ?? "unknown"}</strong>
+      </p>`;
+    } catch {
+      status.textContent = "Connection failed — check your API key and try again.";
+      btn.disabled = false;
+    }
+  });
+
+  return card;
 }
 ```
 
-## ── CELL 6: post-login hint ────────────────────────────────────────────────
+## ── CELL 6: dataset selector label ────────────────────────────────────────
 ```md
-Once you've logged in, you should see a selector appear below:
+Select the dataset you're annotating:
 ```
 
 ## ── CELL 7: dataset selector ────────────────────────────────────────────────
 ```js
-viewof dataset = Inputs.select(user.datasets.sort(), {
-  label: "Select a data set",
+viewof dataset = Inputs.select((formData?.datasets ?? []).sort(), {
+  label: "Dataset",
   value: "Actino_Draft"
 })
 ```
@@ -90,7 +124,8 @@ viewof dataset = Inputs.select(user.datasets.sort(), {
 viewof phageName = Inputs.text({
   label: "Phage name",
   placeholder: "e.g. Beanstalk",
-  value: ""
+  value: "",
+  submit: "Load"
 })
 ```
 
@@ -104,9 +139,9 @@ refPhageResult = {
   const signal = controller.signal;
 
   const fetchGenome = async (name) => {
-    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, user.email, user.password, signal);
+    const data = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}/`, formData.apiKey, signal);
     if (data) return { data, isDraft: false };
-    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, user.email, user.password, signal);
+    const draftData = await getPhameratorData(dataset, `/genome/${encodeURIComponent(name)}_Draft/`, formData.apiKey, signal);
     return { data: draftData, isDraft: !!draftData };
   };
   const pn = phageName?.trim().replace(/_Draft$/i, "");
@@ -117,11 +152,19 @@ refPhageResult = {
   };
   if (!pn)
     return mkEl({ data: null, isDraft: false }, "─ enter a phage name", "#94a3b8");
+  if (!formData)
+    return mkEl({ data: null, isDraft: false }, "─ connect to Phamerator first", "#94a3b8");
   try {
     const r = await fetchGenome(pn);
-    return r?.data
-      ? mkEl({ data: r.data, isDraft: r.isDraft }, `✓ ${pn} loaded`, "#16a34a")
-      : mkEl({ data: null, isDraft: false }, `✗ ${pn} not found on Phamerator`, "#dc2626");
+    if (!r?.data)
+      return mkEl({ data: null, isDraft: false }, `✗ ${pn} not found on Phamerator`, "#dc2626");
+    const genes = r.data.genes;
+    if (!genes) {
+      console.warn("Unexpected API response — no 'genes' key. Full response:", r.data);
+      return mkEl({ data: r.data, isDraft: r.isDraft },
+        `⚠ ${pn} loaded but no gene data found (check console for API response structure)`, "#b45309");
+    }
+    return mkEl({ data: r.data, isDraft: r.isDraft }, `✓ ${pn} loaded (${genes.length} genes)`, "#16a34a");
   } catch (err) {
     if (err.name === "AbortError") throw err;
     return mkEl({ data: null, isDraft: false }, `✗ Error loading ${pn}: ${err.message}`, "#dc2626");
@@ -197,7 +240,7 @@ result = {
 
   const politeGet = async (endpoint) => {
     if (signal.aborted) throw new DOMException("Aborted", "AbortError");
-    const response = await getPhameratorData(dataset, endpoint, user.email, user.password, signal);
+    const response = await getPhameratorData(dataset, endpoint, formData.apiKey, signal);
     await sleep(REQUEST_DELAY_MS);
     return response;
   };
