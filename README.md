@@ -42,7 +42,7 @@ Run the setup script from the repo root. It creates the virtual environment, ins
 bash scripts/setup.sh
 ```
 
-The script checks that Python 3.10+ is available, creates the virtual environment, installs dependencies, installs the pre-commit hook, prompts for your Phamerator email (saving it to `.env`), and on macOS offers to store your password in Keychain — once stored, you only need the email and the password is never written to disk. It then runs the unit tests and optionally kicks off the data scrape followed by the smoke tests.
+The script checks that Python 3.10+ is available, creates the virtual environment, installs dependencies, installs the pre-commit hook, and prompts you to store your Phamerator API key — on macOS it offers to save it in Keychain so it is never written to disk; on other platforms it is saved to `.env`. It then runs the unit tests and optionally kicks off the data scrape followed by the smoke tests.
 
 To download the database separately at any time:
 
@@ -130,8 +130,7 @@ This writes `output/<cluster>_orpham_report.html` for every cluster and also pro
 |---|---|---|
 | `--dataset` | `Actino_Draft` | Phamerator dataset to scrape |
 | `--output` | `phamerator.sqlite` | Path to the output database |
-| `--email` | `PHAMERATOR_EMAIL` env | Phamerator login email |
-| `--password` | Keychain / `PHAMERATOR_PASSWORD` env | Phamerator password |
+| `--api-key` | `PHAMERATOR_API_KEY` env / Keychain | Phamerator API key |
 | `--delay` | `2.0` | Seconds between requests |
 | `--max-retries` | `3` | Retry attempts per phage |
 | `--force` | off | Drop and recreate the DB before scraping (use after pham updates) |

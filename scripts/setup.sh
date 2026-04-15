@@ -85,58 +85,51 @@ echo
 # 5. Credential setup
 # ---------------------------------------------------------------------------
 ENV_FILE=".env"
-phamerator_email=""
 
-# Prompt for email and write to .env if not already present
-existing_email=$(grep -E "^PHAMERATOR_EMAIL=" "$ENV_FILE" 2>/dev/null | cut -d= -f2-)
-if [ -n "$existing_email" ] && [ "$existing_email" != "you@example.com" ]; then
-    echo "Phamerator email already set in .env: $existing_email"
-    phamerator_email="$existing_email"
+# Check if an API key is already configured
+existing_key=$(grep -E "^PHAMERATOR_API_KEY=" "$ENV_FILE" 2>/dev/null | cut -d= -f2-)
+keychain_has_key=false
+if command -v security &>/dev/null; then
+    if security find-generic-password -a "phamerator" -s "phamerator_api_key" &>/dev/null 2>&1; then
+        keychain_has_key=true
+    fi
+fi
+
+if [ -n "$existing_key" ] || [ "$keychain_has_key" = true ]; then
+    echo "Phamerator API key already configured — skipping credential setup."
 else
-    read -r -p "Phamerator email (leave blank to skip): " phamerator_email
-    if [ -n "$phamerator_email" ]; then
-        if [ -f "$ENV_FILE" ]; then
-            # Replace existing placeholder line or append
-            if grep -qE "^PHAMERATOR_EMAIL=" "$ENV_FILE"; then
-                sed -i '' "s|^PHAMERATOR_EMAIL=.*|PHAMERATOR_EMAIL=${phamerator_email}|" "$ENV_FILE"
+    echo "A Phamerator API key is required to scrape data."
+    echo "You can find your key in your Phamerator account settings."
+    echo
+    if command -v security &>/dev/null; then
+        echo "macOS Keychain is available. Storing your key there means it is"
+        echo "never written to disk — the scrape script reads it automatically."
+        echo
+        read -r -p "Store Phamerator API key in Keychain now? [y/N] " cred_answer
+        echo
+        if [[ "$cred_answer" =~ ^[Yy] ]]; then
+            # -w prompts securely (no echo); -U updates if already exists
+            if security add-generic-password -U \
+                    -a "phamerator" \
+                    -s "phamerator_api_key" \
+                    -w 2>/dev/null; then
+                echo "  API key stored in Keychain (service: phamerator_api_key)."
+                echo "  To update later: security add-generic-password -U -a phamerator -s phamerator_api_key -w"
             else
-                echo "PHAMERATOR_EMAIL=${phamerator_email}" >> "$ENV_FILE"
+                echo "  WARNING: Could not store key. Try manually:"
+                echo "    security add-generic-password -a phamerator -s phamerator_api_key -w"
             fi
         else
-            echo "PHAMERATOR_EMAIL=${phamerator_email}" > "$ENV_FILE"
+            echo "Skipped. You can store it later:"
+            echo "  security add-generic-password -a phamerator -s phamerator_api_key -w"
+            echo "Or set PHAMERATOR_API_KEY in your .env file."
         fi
-        echo "  Email saved to $ENV_FILE."
     else
-        echo "  Skipped — set PHAMERATOR_EMAIL in .env before running the scrape."
+        echo "Set your API key in $ENV_FILE:"
+        echo "  PHAMERATOR_API_KEY=your_key_here"
     fi
 fi
 echo
-
-# Store password in macOS Keychain if available
-if [ -n "$phamerator_email" ] && command -v security &>/dev/null; then
-    echo "macOS Keychain is available. Storing your password here means it is"
-    echo "never written to disk — the scrape script reads it automatically."
-    echo
-    read -r -p "Store Phamerator password in Keychain now? [y/N] " cred_answer
-    echo
-    if [[ "$cred_answer" =~ ^[Yy] ]]; then
-        # -w prompts securely (no echo); -U updates if already exists
-        if security add-generic-password -U \
-                -a "$phamerator_email" \
-                -s "phamerator_password" \
-                -w 2>/dev/null; then
-            echo "  Password stored in Keychain (service: phamerator_password)."
-            echo "  To update later: security add-generic-password -U -a \"$phamerator_email\" -s phamerator_password -w"
-        else
-            echo "  WARNING: Could not store password. Try manually:"
-            echo "    security add-generic-password -a \"$phamerator_email\" -s phamerator_password -w"
-        fi
-    else
-        echo "Skipped. To store later:"
-        echo "  security add-generic-password -a \"$phamerator_email\" -s phamerator_password -w"
-    fi
-    echo
-fi
 
 # ---------------------------------------------------------------------------
 # 6. Unit tests

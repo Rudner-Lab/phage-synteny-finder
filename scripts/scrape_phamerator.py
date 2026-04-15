@@ -14,18 +14,18 @@ Usage
     .venv/bin/python scripts/scrape_phamerator.py
     .venv/bin/python scripts/scrape_phamerator.py --dataset Actino_Draft --output phamerator.sqlite
 
-Credentials are read from environment variables (or a .env file if
-python-dotenv is installed). On macOS the password is also looked up
-automatically from Keychain (service "phamerator_password") if the email
-is known — store it once with:
+Credentials
+-----------
+An API key is required. Resolution order:
+  1. --api-key flag
+  2. PHAMERATOR_API_KEY environment variable (or .env file)
+  3. macOS Keychain (service "phamerator_api_key", account "phamerator")
 
-    security add-generic-password -a "you@example.com" -s "phamerator_password" -w
+Store the key in Keychain once with:
 
-Then just run:
+    security add-generic-password -a "phamerator" -s "phamerator_api_key" -w
 
-    .venv/bin/python scripts/scrape_phamerator.py --email "you@example.com"
-
-If PHAMERATOR_EMAIL is set in .env, no flags are needed at all.
+Then no flags are needed at all.
 
 Rate-limiting behaviour (all configurable via CLI flags)
 ---------------------------------------------------------
@@ -38,7 +38,6 @@ marked 'success' in the scrape_log table.
 """
 
 import argparse
-import base64
 import json
 import os
 import sqlite3
@@ -157,9 +156,8 @@ def open_db(path: str) -> sqlite3.Connection:
 # API helpers
 # ---------------------------------------------------------------------------
 
-def _auth_header(email: str, password: str) -> dict:
-    token = base64.b64encode(f"{email}:{password}".encode()).decode()
-    return {"Authorization": f"Basic {token}"}
+def _auth_header(api_key: str) -> dict:
+    return {"Authorization": f"Bearer {api_key}"}
 
 
 def _get(url: str, headers: dict, timeout: int = 30) -> dict | list:
@@ -489,12 +487,8 @@ def parse_args() -> argparse.Namespace:
         help="Maximum retry attempts per phage before marking it failed",
     )
     parser.add_argument(
-        "--email",
-        help="Phamerator login email (overrides PHAMERATOR_EMAIL env var)",
-    )
-    parser.add_argument(
-        "--password",
-        help="Phamerator login password (overrides PHAMERATOR_PASSWORD env var)",
+        "--api-key",
+        help="Phamerator API key (overrides PHAMERATOR_API_KEY env var)",
     )
     parser.add_argument(
         "--force", action="store_true",
@@ -506,15 +500,17 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-_KEYCHAIN_SERVICE = "phamerator_password"
+_KEYCHAIN_SERVICE = "phamerator_api_key"
+_KEYCHAIN_ACCOUNT = "phamerator"
 
 
-def _keychain_password(email: str) -> str:
-    """Return the Keychain password for *email*, or '' if unavailable/not macOS."""
+def _keychain_api_key() -> str:
+    """Return the Phamerator API key from macOS Keychain, or '' if unavailable."""
     import subprocess
     try:
         result = subprocess.run(
-            ["security", "find-generic-password", "-a", email, "-s", _KEYCHAIN_SERVICE, "-w"],
+            ["security", "find-generic-password",
+             "-a", _KEYCHAIN_ACCOUNT, "-s", _KEYCHAIN_SERVICE, "-w"],
             capture_output=True, text=True, timeout=5,
         )
         if result.returncode == 0:
@@ -527,25 +523,22 @@ def _keychain_password(email: str) -> str:
 def main() -> None:
     args = parse_args()
 
-    # Credentials: CLI flag > env var > macOS Keychain
-    email = args.email or os.environ.get("PHAMERATOR_EMAIL", "")
-    password = args.password or os.environ.get("PHAMERATOR_PASSWORD", "")
+    # API key: CLI flag > env var > macOS Keychain
+    api_key = args.api_key or os.environ.get("PHAMERATOR_API_KEY", "")
 
-    if email and not password:
-        kc = _keychain_password(email)
-        if kc:
-            print("Credentials: using password from macOS Keychain.")
-            password = kc
+    if not api_key:
+        api_key = _keychain_api_key()
+        if api_key:
+            print("Credentials: using API key from macOS Keychain.")
 
-    if not email or not password:
+    if not api_key:
         sys.exit(
-            "ERROR: Phamerator credentials not found.\n"
-            "Resolution order tried: --password flag, PHAMERATOR_PASSWORD env var,\n"
-            "macOS Keychain (service 'phamerator_password', account = email).\n\n"
-            "To store your password in Keychain (recommended on macOS):\n"
-            "  security add-generic-password \\\n"
-            f"    -a \"you@example.com\" -s \"{_KEYCHAIN_SERVICE}\" -w\n\n"
-            "Then run with just --email and the password will be found automatically."
+            "ERROR: Phamerator API key not found.\n"
+            "Resolution order tried: --api-key flag, PHAMERATOR_API_KEY env var,\n"
+            f"macOS Keychain (service '{_KEYCHAIN_SERVICE}', account '{_KEYCHAIN_ACCOUNT}').\n\n"
+            "To store your key in Keychain (recommended on macOS):\n"
+            f"  security add-generic-password -a \"{_KEYCHAIN_ACCOUNT}\" -s \"{_KEYCHAIN_SERVICE}\" -w\n\n"
+            "Or set PHAMERATOR_API_KEY in your .env file."
         )
 
     if args.force:
@@ -560,7 +553,7 @@ def main() -> None:
     print(f"Retries : up to {args.max_retries} (base wait {args.retry_wait}s, doubling)")
     print()
 
-    headers = _auth_header(email, password)
+    headers = _auth_header(api_key)
     conn = open_db(args.output)
 
     try:
