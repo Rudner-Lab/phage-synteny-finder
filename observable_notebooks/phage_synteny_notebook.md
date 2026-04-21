@@ -15,11 +15,6 @@ Enter a phage name and select a gene. This tool queries [Phamerator](https://pha
 ## Step 1: Connect to Phamerator
 ```
 
-## ── CELL 2: Phamerator imports ─────────────────────────────────────────────
-```js
-import { terms } from "@scresawn/phamerator-api-utilities"
-```
-
 ## ── CELL 3: Abortable Phamerator API func ──────────────────────────────────
 ```js
 getPhameratorData = (dataset, endpoint, apiKey, signal) => {
@@ -34,8 +29,8 @@ getPhameratorData = (dataset, endpoint, apiKey, signal) => {
 
 ## ── CELL 4: Phamerator terms ───────────────────────────────────────────────
 
-```js
-terms
+```md
+**Terms of use:** To use this notebook, first ensure that you have a [phamerator.org](https://phamerator.org) API key. You can create one by [signing up](https://phamerator.org/sign-up) for a [phamerator.org](https://phamerator.org) account and then clicking ***generate new API key*** in your [account settings](https://phamerator.org/account). Enter your key in the box [here](https://observablehq.com/@cresawn-labs/phamerator-api-utilities). You should only need to do this once. Protect your API key like you would a password. If you accidentally expose your key, [revoke it and generate a new key](https://phamerator.org/account).  Use of phamerator.org, the phamerator.org API, or data stored in the phamerator.org database, whether the use occurs here on https://observablehq.com or elsewhere, constitutes your agreement to the terms and policies of both [phamerator.org](https://phamerator.org/terms) and the SEA-PHAGES program's [phagesdb.org](https://phagesdb.org/terms/). In addition, when creating your own [observablehq.com](https://observablehq.com) notebooks that feature Phamerator.org data, you agree to prominently display these terms of use near the top of your notebook(s).
 ```
 
 ## ── CELL 5: Phamerator login ───────────────────────────────────────────────
