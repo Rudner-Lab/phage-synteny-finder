@@ -27,12 +27,11 @@ An **orpham** is a gene whose protein family (pham) exists in only one phage —
 
 ### Observable notebooks (`observable_notebooks/`)
 
-Two interactive notebooks for use on [ObservableHQ](https://observablehq.com). Each notebook is stored as a Markdown file with cell-by-cell source; paste the cells into a new notebook to use them.
+An interactive notebook for use on [ObservableHQ](https://observablehq.com). The notebook is stored as a Markdown file with cell-by-cell source; paste the cells into a new notebook to use it.
 
 - **`phage_synteny_notebook.md`** — *Phage Genome Annotation – Synteny Helper*: enter a phage name and select a gene to see a synteny table, gene-length statistics, and an auto-generated annotation statement based on neighbour functions.
-- **`orpham_synteny_notebook.md`** — *Orpham Synteny Scanner*: enter a phage name to scan all its orphams and view per-orpham hit counts, function tallies, and synteny tables grouped by cluster.
 
-Both notebooks query the Phamerator API directly and require a Phamerator login.
+The notebook queries the Phamerator API directly and requires a Phamerator login.
 
 ## Setup
 
@@ -185,7 +184,6 @@ tests/
 
 observable_notebooks/
   phage_synteny_notebook.md   Phage Genome Annotation – Synteny Helper
-  orpham_synteny_notebook.md  Orpham Synteny Scanner
 
 output/                       generated HTML reports (not committed to the repo)
 

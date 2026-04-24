@@ -176,13 +176,26 @@ def fetch_with_retry(
 ) -> dict | list | None:
     """
     Fetch a URL with exponential backoff.
-    Returns None if all retries are exhausted.
+    429 responses are waited out using the x-ratelimit-reset header and do not
+    count against the retry budget. Returns None if all retries are exhausted.
     """
-    for attempt in range(max_retries + 1):
+    attempt = 0
+    while attempt <= max_retries:
         try:
             return _get(url, headers)
         except requests.exceptions.HTTPError as exc:
             status = exc.response.status_code if exc.response is not None else "?"
+            if status == 429 and exc.response is not None:
+                reset_header = exc.response.headers.get("x-ratelimit-reset")
+                if reset_header:
+                    wait = max(int(reset_header) - time.time(), 0) + 5
+                    reset_str = datetime.fromtimestamp(int(reset_header)).strftime("%H:%M:%S")
+                    print(f"    WARN [{label}] Rate limited — waiting until {reset_str} ({wait:.0f}s)")
+                else:
+                    wait = 900
+                    print(f"    WARN [{label}] Rate limited — waiting 15 min (no reset header)")
+                time.sleep(wait)
+                continue  # 429 does not consume a retry attempt
             if attempt == max_retries:
                 print(f"    FAIL [{label}] HTTP {status} after {attempt+1} attempt(s)")
                 return None
@@ -190,6 +203,7 @@ def fetch_with_retry(
             print(f"    WARN [{label}] HTTP {status} — retrying in {wait:.0f}s "
                   f"(attempt {attempt+1}/{max_retries})")
             time.sleep(wait)
+            attempt += 1
         except requests.exceptions.RequestException as exc:
             if attempt == max_retries:
                 print(f"    FAIL [{label}] {exc} after {attempt+1} attempt(s)")
@@ -198,6 +212,7 @@ def fetch_with_retry(
             print(f"    WARN [{label}] {exc} — retrying in {wait:.0f}s "
                   f"(attempt {attempt+1}/{max_retries})")
             time.sleep(wait)
+            attempt += 1
     return None
 
 
