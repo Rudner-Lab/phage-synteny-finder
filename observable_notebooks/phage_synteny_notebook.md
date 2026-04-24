@@ -15,7 +15,7 @@ Enter a phage name and select a gene. This tool queries [Phamerator](https://pha
 ## Step 1: Connect to Phamerator
 ```
 
-## ── CELL 3: Abortable Phamerator API func ──────────────────────────────────
+## ── CELL 2: Abortable Phamerator API func ──────────────────────────────────
 ```js
 getPhameratorData = (dataset, endpoint, apiKey, signal) => {
   return d3.json(`https://phamerator.org/api/${dataset}${endpoint}`, {
@@ -27,13 +27,13 @@ getPhameratorData = (dataset, endpoint, apiKey, signal) => {
 }
 ```
 
-## ── CELL 4: Phamerator terms ───────────────────────────────────────────────
+## ── CELL 3: Phamerator terms ───────────────────────────────────────────────
 
 ```md
 **Terms of use:** To use this notebook, first ensure that you have a [phamerator.org](https://phamerator.org) API key. You can create one by [signing up](https://phamerator.org/sign-up) for a [phamerator.org](https://phamerator.org) account and then clicking ***generate new API key*** in your [account settings](https://phamerator.org/account). Enter your key in the box [here](https://observablehq.com/@cresawn-labs/phamerator-api-utilities). You should only need to do this once. Protect your API key like you would a password. If you accidentally expose your key, [revoke it and generate a new key](https://phamerator.org/account).  Use of phamerator.org, the phamerator.org API, or data stored in the phamerator.org database, whether the use occurs here on https://observablehq.com or elsewhere, constitutes your agreement to the terms and policies of both [phamerator.org](https://phamerator.org/terms) and the SEA-PHAGES program's [phagesdb.org](https://phagesdb.org/terms/). In addition, when creating your own [observablehq.com](https://observablehq.com) notebooks that feature Phamerator.org data, you agree to prominently display these terms of use near the top of your notebook(s).
 ```
 
-## ── CELL 5: Phamerator login ───────────────────────────────────────────────
+## ── CELL 4: Phamerator login ───────────────────────────────────────────────
 ```js
 viewof formData = {
   const card = html`<div style="
@@ -94,12 +94,12 @@ viewof formData = {
 }
 ```
 
-## ── CELL 6: dataset selector label ────────────────────────────────────────
+## ── CELL 5: dataset selector label ────────────────────────────────────────
 ```md
 Select the dataset you're annotating:
 ```
 
-## ── CELL 7: dataset selector ────────────────────────────────────────────────
+## ── CELL 6: dataset selector ────────────────────────────────────────────────
 ```js
 viewof dataset = Inputs.select((formData?.datasets ?? []).sort(), {
   label: "Dataset",
@@ -107,13 +107,13 @@ viewof dataset = Inputs.select((formData?.datasets ?? []).sort(), {
 })
 ```
 
-## ── CELL 8: Phage selection heading ─────────────────────────────────────────
+## ── CELL 7: Phage selection heading ─────────────────────────────────────────
 
 ```md
 ## Step 2: Select your gene of interest
 ```
 
-## ── CELL 9: phage name input ───────────────────────────────────────────────
+## ── CELL 8: phage name input ───────────────────────────────────────────────
 
 ```js
 viewof phageName = Inputs.text({
@@ -125,7 +125,7 @@ viewof phageName = Inputs.text({
 ```
 
 
-## ── CELL 10: fetch reference phage ─────────────────────────────────────────
+## ── CELL 9: fetch reference phage ─────────────────────────────────────────
 
 ```js
 refPhageResult = {
@@ -167,21 +167,21 @@ refPhageResult = {
 }
 ```
 
-## ── CELL 11: gene selector ─────────────────────────────────────────────────
+## ── CELL 10: gene selector ─────────────────────────────────────────────────
 
 ```js
 viewof selectedGene = {
   const genes = refPhageResult?.data?.genes
     ? [...refPhageResult.data.genes].sort((a, b) => Number(a.name) - Number(b.name))
     : [];
-  return Inputs.select(genes, {
+  return Inputs.select([null, ...genes], {
     label: "Gene",
-    format: g => `Gene ${g.name}  (${Number(g.start).toLocaleString()}–${Number(g.stop).toLocaleString()})`
+    format: g => g ? `Gene ${g.name}  (${Number(g.start).toLocaleString()}–${Number(g.stop).toLocaleString()})` : "— select a gene —"
   });
 }
 ```
 
-## ── CELL 12: start site override ───────────────────────────────────────────
+## ── CELL 11: start site override ───────────────────────────────────────────
 
 ```js
 viewof customStart = {
@@ -213,6 +213,16 @@ viewof customStart = {
 }
 ```
 
+## ── CELL 12: genome cache ───────────────────────────────────────────────────
+```js
+viewof genomeCache = {
+  const cache = new Map();
+  const el = html`<span style="font-size:0.75em;color:#94a3b8">🗄 Genome cache</span>`;
+  el.value = cache;
+  return el;
+}
+```
+
 ## ── CELL 13: core data-fetching logic ───────────────────────────────────────
 ```js
 result = {
@@ -241,10 +251,18 @@ result = {
   };
 
   const fetchGenome = async (name) => {
+    const cacheKey = `${dataset}:${name}`;
+    if (genomeCache.has(cacheKey)) return genomeCache.get(cacheKey);
     const data = await politeGet(`/genome/${encodeURIComponent(name)}/`);
-    if (data) return { data, isDraft: false };
+    if (data) {
+      const entry = { data, isDraft: false };
+      genomeCache.set(cacheKey, entry);
+      return entry;
+    }
     const draftData = await politeGet(`/genome/${encodeURIComponent(name)}_Draft/`);
-    return { data: draftData, isDraft: !!draftData };
+    const entry = { data: draftData, isDraft: !!draftData };
+    genomeCache.set(cacheKey, entry);
+    return entry;
   };
 
   // Returns a compact <span> that also carries all data properties.
