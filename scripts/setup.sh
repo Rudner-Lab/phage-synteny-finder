@@ -87,7 +87,7 @@ echo
 ENV_FILE=".env"
 
 # Check if an API key is already configured
-existing_key=$(grep -E "^PHAMERATOR_API_KEY=" "$ENV_FILE" 2>/dev/null | cut -d= -f2-)
+existing_key=$(grep -E "^PHAMERATOR_API_KEY=" "$ENV_FILE" 2>/dev/null | cut -d= -f2- || true)
 keychain_has_key=false
 if command -v security &>/dev/null; then
     if security find-generic-password -a "phamerator" -s "phamerator_api_key" &>/dev/null 2>&1; then
