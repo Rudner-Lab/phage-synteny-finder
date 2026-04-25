@@ -60,39 +60,54 @@ terms
 ## ── CELL 5: Phamerator login ───────────────────────────────────────────────
 ```js
 viewof formData = {
-  const card = html`<div style="
-    border:1px solid #e2e8f0; border-radius:8px;
-    padding:16px 20px; max-width:460px;
-    background:#f8fafc; font-family:system-ui,sans-serif;
-  ">
-    <p style="margin:0 0 12px;font-weight:600;font-size:0.95em;color:#1e293b">
-      🔑 Phamerator API Key
-    </p>
-    <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
-      <input name="apiKey" type="password"
-        placeholder="Paste your API key here"
-        style="flex:1;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;
-               font-size:0.9em;font-family:monospace;color:#1e293b">
-      <button type="button" id="connect-btn" style="
-        padding:6px 16px; background:#1e40af; color:#fff;
-        border:none; border-radius:6px; font-size:0.9em;
-        cursor:pointer; white-space:nowrap;
-      ">Connect</button>
+  const LS_KEY = "phamerator_api_key";
+  const savedKey = localStorage.getItem(LS_KEY) || "";
+
+  const card = html`<div style="font-family:system-ui,sans-serif;max-width:460px">
+    <div id="login-form" style="border:1px solid #e2e8f0;border-radius:8px;padding:16px 20px;background:#f8fafc">
+      <p style="margin:0 0 12px;font-weight:600;font-size:0.95em;color:#1e293b">
+        🔑 Phamerator API Key
+      </p>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+        <input name="apiKey" type="password"
+          placeholder="Paste your API key here"
+          style="flex:1;padding:6px 10px;border:1px solid #cbd5e1;border-radius:6px;
+                 font-size:0.9em;font-family:monospace;color:#1e293b">
+        <button type="button" id="connect-btn" style="
+          padding:6px 16px;background:#1e40af;color:#fff;
+          border:none;border-radius:6px;font-size:0.9em;
+          cursor:pointer;white-space:nowrap;
+        ">Connect</button>
+      </div>
+      <p style="margin:0 0 8px;font-size:0.8em;color:#64748b;line-height:1.5">
+        To get your key: log in at <a href="https://phamerator.org" target="_blank" style="color:#1e40af">phamerator.org</a>,
+        click your name in the top-right corner, then find <strong>API Access</strong> and click <strong>Generate new API key</strong>.
+        <strong>Save it to a password manager immediately</strong> — Phamerator cannot show it again,
+        and you will need to generate a new one if you lose it.
+      </p>
+      <div id="login-status" style="font-size:0.82em;color:#64748b;min-height:1.1em"></div>
     </div>
-    <p style="margin:0 0 8px;font-size:0.8em;color:#64748b;line-height:1.5">
-      To get your key: log in at <a href="https://phamerator.org" target="_blank" style="color:#1e40af">phamerator.org</a>,
-      click your name in the top-right corner, then find <strong>API Access</strong> and click <strong>Generate new API key</strong>.
-      <strong>Save it to a password manager immediately</strong> — Phamerator cannot show it again,
-      and you will need to generate a new one if you lose it.
-    </p>
-    <div id="login-status" style="font-size:0.82em;color:#64748b;min-height:1.1em"></div>
+    <div id="connected-state" style="display:none;font-size:0.85em;color:#475569">
+      <span style="color:#16a34a">✓</span> Connected as <strong id="username-display"></strong>
+      &nbsp;·&nbsp;
+      <button type="button" id="logout-btn" style="
+        padding:2px 10px;border-radius:5px;border:1px solid #cbd5e1;
+        background:#f8fafc;cursor:pointer;font-size:0.85em;color:#64748b;
+      ">Log out</button>
+    </div>
   </div>`;
 
   card.value = null;
 
-  const btn    = card.querySelector("#connect-btn");
-  const input  = card.querySelector("[name=apiKey]");
-  const status = card.querySelector("#login-status");
+  const loginForm      = card.querySelector("#login-form");
+  const connectedState = card.querySelector("#connected-state");
+  const btn            = card.querySelector("#connect-btn");
+  const input          = card.querySelector("[name=apiKey]");
+  const status         = card.querySelector("#login-status");
+  const usernameEl     = card.querySelector("#username-display");
+  const logoutBtn      = card.querySelector("#logout-btn");
+
+  input.value = savedKey;
 
   btn.addEventListener("click", async () => {
     const apiKey = input.value.trim();
@@ -103,15 +118,27 @@ viewof formData = {
       const profile = await d3.json("https://phamerator.org/api/profile", {
         headers: new Headers({ Authorization: `Bearer ${apiKey}` })
       });
+      localStorage.setItem(LS_KEY, apiKey);
       card.value = { apiKey, datasets: profile.datasets ?? [] };
       card.dispatchEvent(new CustomEvent("input"));
-      card.innerHTML = `<p style="margin:0;font-size:0.85em;color:#475569;font-family:system-ui,sans-serif">
-        <span style="color:#16a34a">✓</span> Connected as <strong>${profile.username ?? profile.email ?? "unknown"}</strong>
-      </p>`;
+      usernameEl.textContent = profile.username ?? profile.email ?? "unknown";
+      loginForm.style.display      = "none";
+      connectedState.style.display = "";
     } catch {
       status.textContent = "Connection failed — check your API key and try again.";
       btn.disabled = false;
     }
+  });
+
+  logoutBtn.addEventListener("click", () => {
+    localStorage.removeItem(LS_KEY);
+    card.value = null;
+    card.dispatchEvent(new CustomEvent("input"));
+    input.value                  = "";
+    status.textContent           = "";
+    btn.disabled                 = false;
+    connectedState.style.display = "none";
+    loginForm.style.display      = "";
   });
 
   return card;
