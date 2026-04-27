@@ -62,11 +62,11 @@ class TestRealDbAnalysis:
 
 
 class TestRealDbClusters:
-    def test_cluster_F_wildcard_count(self, real_db):
+    def test_cluster_DF_wildcard_count(self, real_db):
         from orpham_report.db import resolve_cluster_phages
-        # "F*" wildcard: all phages in cluster F regardless of subcluster → 273
-        rows = resolve_cluster_phages(real_db, ["F*"], REAL_DATASET)
-        assert len(rows) == 273
+        # "DF*" wildcard: all phages in cluster DF across all subclusters
+        rows = resolve_cluster_phages(real_db, ["DF*"], REAL_DATASET)
+        assert len(rows) == 6
 
     def test_cluster_F_unsubclustered(self, real_db):
         from orpham_report.db import resolve_cluster_phages
@@ -74,10 +74,11 @@ class TestRealDbClusters:
         rows = resolve_cluster_phages(real_db, ["F"], REAL_DATASET)
         assert len(rows) == 4
 
-    def test_subcluster_F1_count(self, real_db):
+    def test_subcluster_D2_count(self, real_db):
         from orpham_report.db import resolve_cluster_phages
-        rows = resolve_cluster_phages(real_db, ["F1"], REAL_DATASET)
-        assert len(rows) == 253
+        # D2 has exactly 1 phage
+        rows = resolve_cluster_phages(real_db, ["D2"], REAL_DATASET)
+        assert len(rows) == 1
 
     def test_all_returns_full_dataset(self, real_db):
         from orpham_report.db import resolve_cluster_phages
