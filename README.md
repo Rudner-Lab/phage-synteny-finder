@@ -1,6 +1,6 @@
 # Phage Synteny Tools
 
-[![CI](https://github.com/Rudner-Lab/phage-synteny-finder/actions/workflows/ci.yml/badge.svg)](https://github.com/Rudner-Lab/phage-synteny-finder/actions/workflows/ci.yml)
+[![CI](https://github.com/Rudner-Lab/phage-synteny-finder/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Rudner-Lab/phage-synteny-finder/actions/workflows/ci.yml)
 
 A collection of tools for synteny-based phage genome annotation, built around the [Phamerator](https://phamerator.org) database.
 
