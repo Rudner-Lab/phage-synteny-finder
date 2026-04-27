@@ -1,4 +1,4 @@
-# Phage Synteny Tools
+# Phage Synteny Finder
 
 [![CI](https://github.com/Rudner-Lab/phage-synteny-finder/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Rudner-Lab/phage-synteny-finder/actions/workflows/ci.yml)
 
