@@ -1,5 +1,7 @@
 # Phage Synteny Tools
 
+[![CI](https://github.com/Rudner-Lab/phage-synteny-finder/actions/workflows/ci.yml/badge.svg)](https://github.com/Rudner-Lab/phage-synteny-finder/actions/workflows/ci.yml)
+
 A collection of tools for synteny-based phage genome annotation, built around the [Phamerator](https://phamerator.org) database.
 
 ## Data & licensing
@@ -27,7 +29,7 @@ An **orpham** is a gene whose protein family (pham) exists in only one phage —
 
 ### Observable notebooks (`observable_notebooks/`)
 
-An interactive notebook for use on [ObservableHQ](https://observablehq.com). The notebook is stored as a Markdown file with cell-by-cell source; paste the cells into a new notebook to use it.
+An interactive notebook for use on [ObservableHQ](https://observablehq.com). The notebook is stored as a Markdown file with cell-by-cell source. A hosted copy is available at https://observablehq.com/@phage-annotation-class/synteny-helper; you may use the hosted copy directly, fork it and modify it within Observable, or copy the code from this repository into your own new notebook.
 
 - **`phage_synteny_notebook.md`** — *Phage Genome Annotation – Synteny Helper*: enter a phage name and select a gene to see a synteny table, gene-length statistics, and an auto-generated annotation statement based on neighbour functions.
 
